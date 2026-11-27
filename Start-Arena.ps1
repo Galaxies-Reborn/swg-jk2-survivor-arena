@@ -17,7 +17,7 @@ $hostProcess = $null
 Push-Location $PSScriptRoot
 try {
     if (!$Navigation) { $Navigation = Join-Path $PSScriptRoot '.local/navigation.json' }
-    if (!(Test-Path -LiteralPath $Navigation)) {
+    if (!(Test-Path -LiteralPath $Navigation) -or !(Get-Content -Raw -LiteralPath $Navigation | ConvertFrom-Json).entrances) {
         if (!$ClientRoot) { throw 'Supply -Navigation from the local SWG installation, or -ClientRoot to generate it.' }
         $retail = (Get-Content -Raw (Join-Path $ClientRoot '.local/content-packs/pre-cu.json') | ConvertFrom-Json).source_root
         $null = New-Item -ItemType Directory -Force (Split-Path -Parent $Navigation)

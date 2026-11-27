@@ -1,6 +1,6 @@
 # Survivor Arena
 
-A one- or two-player cooperative FPS combat mod set in an SWG Tatooine cantina. Fight waves of Tusken raiders with a lightsaber and a blaster. A red-bladed duelist leads the raiders. Watch the windup, guard as the blade arrives and attack during the opening. Clear a wave to recover health and bring downed teammates back. If the party falls, either player can start a fresh run. The server owns movement, projectile and saber hits, enemy AI, wave progression and score.
+A one- or two-player cooperative FPS combat mod set in an SWG Tatooine cantina. Fight waves of Tusken raiders with a lightsaber and a blaster. Raiders enter through the front and back doors, with reinforcements following at intervals. A red-bladed duelist leads the raiders. Watch the windup, guard as the blade arrives and attack during the opening. Clear a wave to recover health and bring downed teammates back. If the party falls, either player can start a fresh run. The server owns movement, projectile and saber hits, enemy AI, wave progression and score.
 
 The server runs compiled combat and movement routines from Jedi Outcast 1.04. The client renders locally owned SWG assets and can use saber motion from a local Jedi Outcast installation. The mod includes the selected JK2 gameplay functions, a survivor simulation, an independent SpacetimeDB adapter and a data-only client pack. [Source map and licenses](NOTICE.md)
 

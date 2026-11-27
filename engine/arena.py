@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 
 DT = 0.05
+JUMP_TICKS = 15  # First grounded tick at 4.4 m/s takeoff, 13 m/s² gravity and 20 Hz.
 SPAWN_RADIUS = 2.8
 CUTS = (
     "overhead",
@@ -212,30 +213,21 @@ def spawn_wave(s, nav=None):
     s["wave"] += 1
     count = min(2 + s["wave"], 12)
     s["enemies"] = []
+    s["arrivals"] = []
     for i in range(count):
-        angle = (i / count) * math.tau
-        e = actor(
-            3 + i, SPAWN_RADIUS * math.sin(angle), SPAWN_RADIUS * math.cos(angle), 2
-        )
+        door = (i + s["wave"] - 1) % 2
+        e = actor(3 + i, 0, (-1 if door else 1) * SPAWN_RADIUS, 2)
         if nav:
-            players = list(s["players"].values())
-            anchor = players[i % len(players)] if players else dict(x=0.0, z=0.0)
-            for radius in (5.5, 4.0, 2.8, 1.6, 0.8, 0.0):
-                x, z = (
-                    anchor["x"] + radius * math.sin(angle),
-                    anchor["z"] + radius * math.cos(angle),
-                )
-                surface = nav.locate(
-                    x, z, anchor.get("cell"), anchor.get("ground", 0.0)
-                )
-                if surface:
-                    e.update(x=x, z=z, cell=surface[0], ground=surface[1])
-                    break
+            e.update(nav.entrances[door])
         if i == 0 or (i >= 4 and i % 4 == 0):
             e.update(style=0, health=min(100, 52 + 4 * s["wave"]))
         else:
             e["health"] = min(100, 20 + 5 * s["wave"])
-        s["enemies"].append(e)
+        if i < 2:
+            s["enemies"].append(e)
+        else:
+            s["arrivals"].append(e)
+    s["next_arrival"] = s["clock"] + 18
     s["phase"] = "fighting"
 
 
@@ -313,11 +305,16 @@ def controls(s, p, seat, k):
     p["vy"] = p["vy"] - DT * 13.0 if p["y"] > 0 else 0.0
     # Jump is a movement action; it must not lock out a mid-air saber attack.
     if "jump" in taps and p["y"] == 0 and p["clip"] != "stagger":
-        p.update(vy=4.4, y=0.001)
+        jump = "jump"
+        if p["forward"] > 0:
+            jump = "jump-run" if math.hypot(p["vx"], p["vz"]) >= 2.5 else "jump-forward"
+        elif p["forward"] < 0:
+            jump = "jump-back"
+        p.update(vy=4.4, y=0.001, takeoff=now, jump_clip=jump)
         taps = [b for b in taps if b != "jump"]
         if not p["duration"] and "attack" not in taps:
-            start(p, "jump", 6, now)
-    if p["clip"] == "jump" and "attack" in taps:
+            start(p, jump, JUMP_TICKS, now)
+    if p["clip"].startswith("jump") and "attack" in taps:
         p["duration"] = 0
     current = p["clip"]
     if current.startswith("ready-") and current[6:] in CUTS:
@@ -443,6 +440,9 @@ def controls(s, p, seat, k):
                 )
             if p["duration"]:
                 break
+        if not p["duration"] and p["y"] > 0 and "takeoff" in p:
+            start(p, p.get("jump_clip", "jump"), JUMP_TICKS, p["takeoff"])
+            p["age"] = now - p["takeoff"]
         if not p["duration"]:
             p["clip"] = "walk" if math.hypot(p["vx"], p["vz"]) > 0.18 else "idle"
     p["age"] += 1
@@ -736,6 +736,9 @@ def step(state, seats, k):
         if s["wait"] <= 0:
             spawn_wave(s, k.navigation)
     if s["phase"] == "fighting":
+        if s.get("arrivals") and s["clock"] >= s["next_arrival"]:
+            s["enemies"].append(s["arrivals"].pop(0))
+            s["next_arrival"] = s["clock"] + 12
         before = sum(e["health"] > 0 for e in s["enemies"])
         for p in active:
             if p["health"]:
@@ -747,7 +750,7 @@ def step(state, seats, k):
         s["score"] += 100 * (before - remaining)
         if not any(p["health"] for p in active):
             s["phase"] = "defeat"
-        elif not remaining:
+        elif not remaining and not s.get("arrivals"):
             s.update(phase="intermission", wait=50, bolts=[])
             for p in s["players"].values():
                 p["health"] = min(100, p["health"] + 35)

@@ -159,7 +159,37 @@ def rules(kernel):
     from engine.navigation import Navigation
 
     nav = Navigation(ROOT / ".local/navigation.json")
+    wave = fresh()
+    spawn_wave(wave, nav)
+    assert len(wave["enemies"]) == 2 and len(wave["arrivals"]) == 1
+    for i, foe in enumerate(wave["enemies"] + wave["arrivals"]):
+        door = nav.entrances[i % 2]
+        assert all(foe[field] == door[field] for field in ("cell", "x", "z", "ground"))
     k.navigation = nav
+    for forward, speed, clip in [
+        (0, 0, "jump"),
+        (-1, 0, "jump-back"),
+        (1, 0, "jump-forward"),
+        (1, 4, "jump-run"),
+    ]:
+        jumper = actor(1, -0.55, 0, 0)
+        jumper["vz"] = speed
+        seat = dict(
+            slot=1,
+            epoch=0,
+            inputs=[
+                dict(forward=forward, side=0, turn=0, look=0, pitch=0, button="jump")
+            ],
+        )
+        state = fresh()
+        for tick in range(16):
+            state["clock"] = tick
+            controls(state, jumper, seat, k)
+            seat["inputs"] = []
+            if tick < 15:
+                assert jumper["y"] > 0 and jumper["clip"] == clip, (tick, jumper)
+        assert jumper["y"] == 0 and jumper["clip"] in ("walk", "idle")
+    print("PASS standing, forward, running and backward jump clips through landing")
     v = actor(1, -0.55, 0.0, 0)
     for _ in range(30):
         k.move(v, 1, 0)
@@ -343,6 +373,31 @@ def live(endpoint, wasm, kernel):
             assert peer and peer["y"] > 0.05 and peer["pitch"] < -0.05
             b.send(pitch=-500)
             print("PASS peer-visible first-person pitch and jump", flush=True)
+            from engine.navigation import Navigation
+
+            entrances = Navigation(ROOT / ".local/navigation.json").entrances
+            seen = set()
+            deadline = time.monotonic() + 5
+            while len(seen) < 3 and time.monotonic() < deadline:
+                for foe in a.rows():
+                    slot = foe["slot"]
+                    if slot in (3, 4, 5) and slot not in seen:
+                        entrance = entrances[(slot - 3) % 2]
+                        assert (
+                            math.hypot(
+                                foe["x"] - entrance["x"], foe["z"] - entrance["z"]
+                            )
+                            < 0.8
+                        )
+                        seen.add(slot)
+                a.send()
+                b.send()
+                time.sleep(0.04)
+            assert seen == {3, 4, 5}
+            print(
+                "PASS both doorway origins and staggered reinforcement replicated",
+                flush=True,
+            )
             deadline = time.monotonic() + 4
             while time.monotonic() < deadline:
                 b.send(forward=1)
@@ -369,7 +424,7 @@ def live(endpoint, wasm, kernel):
             resumed = False
             seen_hit = False
             seen_trail = False
-            while time.monotonic() - start < 32:
+            while time.monotonic() - start < 100:
                 rows = a.rows()
                 me = next(r for r in rows if r["mine"])
                 peer = next((r for r in rows if r["slot"] == 2), None)
@@ -422,7 +477,7 @@ def live(endpoint, wasm, kernel):
                 flush=True,
             )
             # Let both seats fall, then request a clean match using only player controls.
-            end = time.monotonic() + 70
+            end = time.monotonic() + 140
             while time.monotonic() < end:
                 a.send()
                 b.send()
