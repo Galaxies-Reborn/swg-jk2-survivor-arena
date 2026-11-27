@@ -910,4 +910,10 @@ def step(state, seats, k):
                 duration_ms=duration * 50,
             )
         actors.append(view)
-    return s, dict(actors=actors, caption=caption, trails=trails)
+    lower_poses = [
+        dict(slot=p["slot"], clip=p["jump_clip"], serial=p["takeoff"],
+             elapsed_ms=(s["clock"] - p["takeoff"]) * 50, duration_ms=JUMP_TICKS * 50)
+        for p in active if p["health"] and "jump_clip" in p and "takeoff" in p
+        and 0 <= s["clock"] - p["takeoff"] < JUMP_TICKS
+    ]
+    return s, dict(actors=actors, caption=caption, trails=trails, lower_poses=lower_poses)

@@ -470,8 +470,18 @@ def live(endpoint, wasm, kernel):
                     break
                 time.sleep(0.025)
             assert peer and peer["y"] > 0.05 and peer["pitch"] < -0.05
-            b.send(pitch=-500)
-            print("PASS peer-visible first-person pitch and jump", flush=True)
+            assert peer["lower_clip"] == "jump"
+            takeoff = peer["lower_serial"]
+            b.send("attack", pitch=-500)
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                peer = next(r for r in a.rows() if r["slot"] == 2)
+                if peer["clip"] in CUTS:
+                    break
+                time.sleep(0.025)
+            assert peer["clip"] in CUTS and peer["lower_serial"] == takeoff
+            assert peer["lower_clip"] == "jump" and 0 < peer["lower_elapsed_ms"] < peer["lower_duration_ms"]
+            print("PASS peer-visible pitch and independent jump phase during a saber cut", flush=True)
             from engine.navigation import Navigation
 
             entrances = Navigation(ROOT / ".local/navigation.json").entrances

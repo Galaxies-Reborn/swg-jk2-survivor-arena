@@ -169,6 +169,7 @@ pub fn enter(ctx: &ReducerContext, pack: String) -> Result<(), String> {
     p.epoch = p.epoch.checked_add(1).ok_or("epoch exhausted")?;
     p.seen = ctx.timestamp.to_micros_since_unix_epoch();
     p.seq = 0;
+    ctx.db.lower_pose().slot().delete(p.slot);
     p.inputs.clear();
     p.online = true;
     if ctx.db.lease_clock().count() == 0 {
@@ -258,8 +259,20 @@ pub fn work(ctx: &ViewContext) -> Vec<Work> {
 #[derive(Deserialize)]
 struct Output {
     actors: Vec<Actor>,
+    #[serde(default)]
+    lower_poses: Vec<LowerPose>,
     caption: String,
     trails: Vec<Vec<f32>>,
+}
+#[derive(Deserialize)]
+#[spacetimedb::table(accessor=lower_pose,private)]
+pub struct LowerPose {
+    #[primary_key]
+    slot: u8,
+    clip: String,
+    serial: u64,
+    elapsed_ms: u32,
+    duration_ms: u32,
 }
 #[spacetimedb::reducer]
 pub fn commit_frame(
@@ -315,6 +328,24 @@ pub fn commit_frame(
         s.inputs.retain(|i| i.seq > ack);
         ctx.db.seat().slot().update(s);
     }
+    let mut lower_slots = std::collections::BTreeSet::new();
+    for pose in frame.lower_poses {
+        if !(1..=2).contains(&pose.slot) || !ids.contains(&pose.slot)
+            || !lower_slots.insert(pose.slot) || pose.clip.is_empty() || pose.clip.len() > 48
+            || pose.duration_ms == 0 || pose.elapsed_ms >= pose.duration_ms {
+            return Err("invalid lower pose".into());
+        }
+        if ctx.db.lower_pose().slot().find(pose.slot).is_some() {
+            ctx.db.lower_pose().slot().update(pose);
+        } else {
+            ctx.db.lower_pose().insert(pose);
+        }
+    }
+    for slot in 1..=2u8 {
+        if !lower_slots.contains(&slot) {
+            ctx.db.lower_pose().slot().delete(slot);
+        }
+    }
     a.revision += 1;
     a.last_step = now;
     a.state = state;
@@ -346,6 +377,10 @@ pub struct Avatar {
     pitch: f32,
     caption: String,
     trails: Vec<Vec<f32>>,
+    lower_clip: String,
+    lower_serial: u64,
+    lower_elapsed_ms: u32,
+    lower_duration_ms: u32,
 }
 #[spacetimedb::view(accessor=action_scene,public,primary_key=slot)]
 pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
@@ -382,6 +417,7 @@ pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
         .into_iter()
         .map(|p| {
             let mine = p.slot == me.slot;
+            let lower = ctx.db.lower_pose().slot().find(p.slot);
             Avatar {
                 slot: p.slot,
                 mine,
@@ -407,6 +443,10 @@ pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
                     String::new()
                 },
                 trails: if mine { a.trails.clone() } else { vec![] },
+                lower_serial: lower.as_ref().map_or(0, |l| l.serial),
+                lower_elapsed_ms: lower.as_ref().map_or(0, |l| l.elapsed_ms),
+                lower_duration_ms: lower.as_ref().map_or(0, |l| l.duration_ms),
+                lower_clip: lower.map_or_else(String::new, |l| l.clip),
             }
         })
         .collect()
