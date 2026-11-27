@@ -2,7 +2,19 @@
 
 A one- or two-player cooperative FPS combat mod set in an SWG Tatooine cantina. Fight waves of Tusken raiders with a lightsaber and a blaster. A red-bladed duelist leads the raiders. Watch the windup, guard as the blade arrives and attack during the opening. Clear a wave to recover health and bring downed teammates back. If the party falls, either player can start a fresh run. The server owns movement, projectile and saber hits, enemy AI, wave progression and score.
 
-The server runs compiled combat and movement routines from Jedi Outcast 1.04. The client renders locally owned SWG assets. The mod includes the selected JK2 gameplay functions, a survivor simulation, an independent SpacetimeDB adapter and a data-only client pack. [Source map and licenses](NOTICE.md)
+The server runs compiled combat and movement routines from Jedi Outcast 1.04. The client renders locally owned SWG assets and can use saber motion from a local Jedi Outcast installation. The mod includes the selected JK2 gameplay functions, a survivor simulation, an independent SpacetimeDB adapter and a data-only client pack. [Source map and licenses](NOTICE.md)
+
+## Local Jedi Outcast saber animations
+
+With a client that supports local motion tracks, run this on the machine that renders the game. Supply your own installed copies of the games.
+
+```powershell
+python prepare_motion.py "X:\Games\Star Wars Jedi Knight II - Jedi Outcast" "<Bevy client root>"
+```
+
+Restart the arena client after preparing the tracks. Seven fast-style attacks and two lateral transitions use the humanoid GLA frames and playback rates from the retail PK3 archives. The client fits shoulder-to-elbow and elbow-to-wrist directions to the SWG skeleton. The first-person view uses wrist travel and a blade axis estimated from the hand, with a forward-facing swipe for camera clearance. The server continues to determine hits and combo windows.
+
+The converter writes one player-local file under `.local/action-motion/`. Removing that file restores SWG-only animation. Keep the converted tracks out of source control and release bundles.
 
 ## Play on Windows
 

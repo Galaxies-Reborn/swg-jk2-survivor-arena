@@ -16,7 +16,7 @@ The worker also adapts the minimum control-speed ground friction and ground/air 
 
 The combo scheduler compares each cut's finishing quadrant to the next cut's starting quadrant, following the distinction in JK2's PM_SaberAnimTransitionAnim in bg_saber.c. Its buffer and recovery timings are specific to the arena's 20 Hz simulation and SWG animations.
 
-The published tree contains source and asset path names. Players obtain art, skeletal animation, weapons and scenery from their own SWG installation. Neither title's retail material is licensed by this repository.
+The published tree contains source and asset path names. Players obtain characters, weapons and scenery from their own SWG installation. The optional prepare_motion.py tool samples saber animations from the player’s Jedi Outcast installation. Generated motion tracks stay in the client’s local content directory. The GLA reader follows the quaternion pool format used by the [OpenJK loader](https://github.com/JACoders/OpenJK/blob/master/code/qcommon/matcomp.cpp). Neither title's retail material is licensed by this repository.
 
 ## Distribution boundary
 

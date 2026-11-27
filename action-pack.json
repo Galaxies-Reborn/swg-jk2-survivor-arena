@@ -137,6 +137,7 @@
     "ready-overhead": [0.04, 0.5],
     "ready-back": [0.04, 0.5]
   },
+  "local_motion": true,
   "frame_rate": 60,
   "return_pairs": [["cut-left", "cut-right"]],
   "view_swings": {
