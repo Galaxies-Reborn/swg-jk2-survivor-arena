@@ -222,10 +222,13 @@ def rules(kernel):
     p.update(clip="overhead", age=4)
     melee(p, [e], 5)
     melee(p, [e], 5)
+    from engine.arena import contact_traces
+    assert e["contact_kind"] == "hit" and len(contact_traces(e, 5)) == 3
+    assert contact_traces(e, 6) != contact_traces(e, 5) and not contact_traces(e, 8)
     assert e["health"] == 68
     rear = actor(4, 0, -1.0, 2)
     melee(p, [rear], 5)
-    assert rear["health"] == 100
+    assert rear["health"] == 100 and not contact_traces(rear, 5)
     s["enemies"] = [e]
     s["bolts"] = [dict(pos=[0, 1.4, 0.5], dir=[0, 0, 1], damage=14, life=3)]
     assert projectiles(s) and e["health"] == 54
@@ -245,6 +248,7 @@ def rules(kernel):
     defender.update(clip="guard", age=2, duration=10)
     melee(attacker, [defender], 10)
     assert attacker["clip"] == "stagger" and defender["health"] == 100
+    assert defender["contact_kind"] == "guard" and len(contact_traces(defender, 10)) == 6
     assert defender["riposte_until"] == 17
     duel["clock"] = 11
     seat = dict(

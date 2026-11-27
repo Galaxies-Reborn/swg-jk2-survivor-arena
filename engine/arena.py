@@ -528,6 +528,33 @@ def blade_contact(a, b):
         return [(x + y) * 0.5 for x, y in zip(left, right)]
 
 
+def contact_traces(actor, now):
+    event = actor.get("clash")
+    if not event:
+        return []
+    tick, x, y, z = event
+    age = now - tick
+    hit = actor.get("contact_kind") == "hit"
+    if age < 0 or age >= (3 if hit else 5):
+        return []
+    # Reconstruct short ballistic streaks from the resolved world-space point.
+    # Tick and slot give every observer the same fan without advancing the RNG.
+    heading = (tick * 0.73 + actor["slot"] * 1.63) % math.tau
+    traces = []
+    end = (age + 1) * DT
+    start = end - 0.9 * DT
+    for i in range(3 if hit else 6):
+        angle = heading + i * 2.4
+        speed = (1.1 + 0.42 * (i % 3)) * (0.75 if hit else 1.4)
+        vx, vz = math.cos(angle) * speed, math.sin(angle) * speed
+        vy = (0.65 + 0.55 * (i % 4)) * (0.8 if hit else 1.3)
+        traces.append([
+            x + vx * start, y + vy * start - 4.9 * start * start, z + vz * start,
+            x + vx * end, y + vy * end - 4.9 * end * end, z + vz * end,
+        ])
+    return traces
+
+
 def melee(p, enemies, now, nav=None):
     if p["clip"] not in CUTS:
         return
@@ -550,6 +577,7 @@ def melee(p, enemies, now, nav=None):
                         start(fighter, "stagger", 4, now)
                         fighter["follow_until"] = -1
                     e["clash"] = [now, *contact]
+                    e["contact_kind"] = "clash"
                     return
             dx, dz = tip[0] - hilt[0], tip[2] - hilt[2]
             along = max(
@@ -574,13 +602,12 @@ def melee(p, enemies, now, nav=None):
             if nav and not nav.clear(p, e):
                 continue
             p["landed"].append(e["slot"])
+            e["clash"] = [
+                now, hilt[0] + along * dx,
+                hilt[1] + along * (tip[1] - hilt[1]), hilt[2] + along * dz,
+            ]
             if e["clip"] == "guard" and faces(e, p):
-                e["clash"] = [
-                    now,
-                    (p["x"] + e["x"]) * 0.5,
-                    e.get("ground", 0.0) + e["y"] + 1.2,
-                    (p["z"] + e["z"]) * 0.5,
-                ]
+                e["contact_kind"] = "guard"
                 if e["age"] <= 4:
                     start(p, "stagger", 7, now)
                     p["follow_until"] = -1
@@ -588,6 +615,7 @@ def melee(p, enemies, now, nav=None):
                     push(p, e, 0.20, nav)
                     return
                 continue
+            e["contact_kind"] = "hit"
             damage = p.get("strike_damage", 32 if p["slot"] <= 2 else 12)
             hurt(e, damage, now)
             if e["health"]:
@@ -785,21 +813,7 @@ def step(state, seats, k):
     for e in falling:
         e["age"] = s["clock"] - e["serial"]
     for a in active + enemies + falling:
-        clash = a.get("clash")
-        if clash and len(trails) <= 29 and 0 <= s["clock"] - clash[0] <= 2:
-            tick, x, y, z = clash
-            spread = 0.07 + 0.055 * (s["clock"] - tick)
-            for dx, dy, dz in ((1, 0.8, -0.4), (-0.7, 0.6, 0.9), (0.2, -1, 0.8)):
-                trails.append(
-                    [
-                        x + dx * spread,
-                        y + dy * spread,
-                        z + dz * spread,
-                        x + dx * (spread + 0.12),
-                        y + dy * (spread + 0.12),
-                        z + dz * (spread + 0.12),
-                    ]
-                )
+        trails.extend(contact_traces(a, s["clock"])[: max(0, 32 - len(trails))])
         view = {
             name: a[name]
             for name in (
