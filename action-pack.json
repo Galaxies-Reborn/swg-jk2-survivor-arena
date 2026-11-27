@@ -119,6 +119,24 @@
   "appearances": {
     "2": "appearance/tusken_raider_m.sat"
   },
+  "clip_ranges": {
+    "cut-left": [0.09, 0.85],
+    "cut-right": [0.09, 0.85],
+    "down-right": [0.09, 0.85],
+    "down-left": [0.09, 0.85],
+    "up-right": [0.09, 0.85],
+    "up-left": [0.09, 0.85],
+    "overhead": [0.09, 0.85],
+    "back": [0.09, 0.85],
+    "ready-cut-left": [0.04, 0.5],
+    "ready-cut-right": [0.04, 0.5],
+    "ready-down-right": [0.04, 0.5],
+    "ready-down-left": [0.04, 0.5],
+    "ready-up-right": [0.04, 0.5],
+    "ready-up-left": [0.04, 0.5],
+    "ready-overhead": [0.04, 0.5],
+    "ready-back": [0.04, 0.5]
+  },
   "view_swings": {
     "overhead": [
       [
