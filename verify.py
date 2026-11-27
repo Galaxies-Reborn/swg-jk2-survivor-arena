@@ -20,6 +20,7 @@ from engine.arena import (
     blade,
     blade_contact,
     actor,
+    attack,
     fresh,
     melee,
     projectiles,
@@ -156,6 +157,22 @@ def rules(kernel):
     rewinding, repeated, link = combo(1)
     assert not direct and link == ["ready-cut-right"] * 3
     assert (mirrored, repeated) == ("cut-left", "cut-right") and returning < rewinding
+    # Action age includes the tick on which the first pose is published.
+    # Check the configured endpoint against the next actual linked cut.
+    for ticks, lead in [(6, 0), (8, 1), (10, 0), (10, 1)]:
+        fighter = actor(1, 0, 0, 0)
+        state = fresh()
+        attack(fighter, "cut-right", ticks, state["clock"], lead=lead)
+        fighter["age"] += 1
+        first_age = fighter["age"]
+        for elapsed in range(1, ticks + 1):
+            state["clock"] += 1
+            controls(state, fighter, dict(epoch=0, inputs=[dict(tap, side=-1)]), k)
+            if fighter["clip"] == "cut-left":
+                break
+        assert fighter["clip"] == "cut-left"
+        assert pack["cut_playback_ms"][str(ticks * 50)] == (first_age + elapsed) * 50
+    print("PASS authored swing playback meets the first linked return cut for every player attack duration")
     print(
         "PASS braking strafe into cut and buffered opposite/same-side links",
         returning,
