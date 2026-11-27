@@ -12,7 +12,7 @@ With a client that supports local motion tracks, run this on the machine that re
 python prepare_motion.py "X:\Games\Star Wars Jedi Knight II - Jedi Outcast" "<Bevy client root>"
 ```
 
-Restart the arena client after preparing the tracks. Seven fast-style attacks and two lateral transitions use the humanoid GLA frames and playback rates from the retail PK3 archives. The client fits shoulder-to-elbow and elbow-to-wrist directions to the SWG skeleton. The first-person view uses wrist travel and a blade axis estimated from the hand, with a forward-facing swipe for camera clearance. The server continues to determine hits and combo windows.
+Restart the arena client after preparing the tracks. Seven fast-style attacks and two lateral transitions use the humanoid GLA frames and playback rates from the retail PK3 archives. The client fits shoulder-to-elbow and elbow-to-wrist directions to the SWG skeleton. The first-person view uses wrist travel and the retail saber emitter direction transformed through Kyle’s right-hand attachment, with a forward-facing swipe for camera clearance. The server continues to determine hits and combo windows.
 
 The converter writes one player-local file under `.local/action-motion/`. Removing that file restores SWG-only animation. Keep the converted tracks out of source control and release bundles.
 

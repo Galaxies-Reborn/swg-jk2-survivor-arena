@@ -25,8 +25,6 @@ BONES = [
     "rhumerus",
     "rradius",
     "rhand",
-    "r_d2_j1",
-    "r_d5_j1",
     "lhumerus",
     "lradius",
     "lhand",
@@ -44,7 +42,64 @@ def product(a, b):
     ]
 
 
-def decode(data, cfg):
+def normalized(v):
+    length = math.hypot(*v)
+    if not math.isfinite(length) or length < 1e-5:
+        raise ValueError("Degenerate bolt axis")
+    return [x / length for x in v]
+
+
+def weapon_axis(model, saber):
+    # LOD 0 rigid hand attachment triangle in the humanoid bind pose.
+    ident, version, _, _, _, _, _, lod, count, _, end = struct.unpack_from(
+        "<4si64s64s7i", model
+    )
+    if ident != b"2LGM" or version != 6 or end != len(model) or not 0 < count <= 256:
+        raise ValueError("Unsupported player mesh")
+    for i in range(count):
+        off = 164 + struct.unpack_from("<i", model, 164 + 4 * i)[0]
+        if model[off : off + 64].split(b"\0")[0] == b"*r_hand":
+            break
+    else:
+        raise ValueError("Right hand attachment missing")
+    off = lod + 4 + struct.unpack_from("<i", model, lod + 4 + 4 * i)[0]
+    _, _, _, verts, vo, tris, _, refs, bo, _ = struct.unpack_from("<10i", model, off)
+    if (verts, tris, refs) != (3, 1, 1):
+        raise ValueError("Expected a rigid bolt triangle")
+    bone = struct.unpack_from("<i", model, off + bo)[0]
+    p = [struct.unpack_from("<3f", model, off + vo + 32 * i + 12) for i in range(3)]
+    short = normalized([a - b for a, b in zip(p[0], p[2])])
+    long = [a - b for a, b in zip(p[1], p[0])]
+    d = sum(a * b for a, b in zip(short, long))
+    long = normalized([a - d * b for a, b in zip(long, short)])
+    normal = [
+        short[(i + 1) % 3] * long[(i + 2) % 3] - short[(i + 2) % 3] * long[(i + 1) % 3]
+        for i in range(3)
+    ]
+    ident, version, _, _, frames, tags, _, _, _, tag_off, _, end = struct.unpack_from(
+        "<4si64s9i", saber
+    )
+    if (
+        ident != b"IDP3"
+        or version != 15
+        or frames < 1
+        or not 1 <= tags <= 64
+        or end != len(saber)
+    ):
+        raise ValueError("Unsupported saber model")
+    for t in range(tags):
+        name, *values = struct.unpack_from("<64s12f", saber, tag_off + 112 * t)
+        if name.split(b"\0")[0] == b"tag_flash":
+            # MD3 tag X is the emitter direction in weapon coordinates.
+            x, y, z = values[3:6]
+            return bone, normalized(
+                [x * short[i] + y * long[i] + z * normal[i] for i in range(3)]
+            )
+    raise ValueError("Saber emitter tag missing")
+
+
+def decode(data, cfg, model, saber):
+    bolt, axis = weapon_axis(model, saber)
     header = struct.Struct("<4si64sf6i")
     ident, version, _, _, frames, indices, bones, pool, _, end = header.unpack_from(
         data
@@ -132,6 +187,12 @@ def decode(data, cfg):
                 raise ValueError("Degenerate arm segment")
             return [round(x / n, 6) for x in d]
 
+        if not 0 <= bolt < bones:
+            raise ValueError("Invalid hand bolt bone")
+        orientation = skin(bolt)
+        x, y, z = normalized(
+            [sum(row[j] * axis[j] for j in range(3)) for row in orientation]
+        )
         return dict(
             arms=[
                 unit("rradius", "rhumerus"),
@@ -139,7 +200,7 @@ def decode(data, cfg):
                 unit("lradius", "lhumerus"),
                 unit("lhand", "lradius"),
             ],
-            blade=unit("r_d2_j1", "r_d5_j1"),
+            blade=[round(v, 6) for v in (x, z, -y)],
             hand=[round(x / 40, 6) for x in diff("rhand", "thoracic")],
         )
 
@@ -171,6 +232,8 @@ def prepare(game, client):
     paths = [
         "models/players/_humanoid/_humanoid.gla",
         "models/players/_humanoid/animation.cfg",
+        "models/players/kyle/model.glm",
+        "models/weapons2/saber/saber_w.md3",
     ]
     for archive in sorted(base.glob("assets*.pk3")):
         with ZipFile(archive) as z:
@@ -179,7 +242,7 @@ def prepare(game, client):
                     if z.getinfo(path).file_size > 32 * 1024 * 1024:
                         raise ValueError("Retail input exceeds budget")
                     assets[path] = z.read(path)
-    if len(assets) != 2:
+    if len(assets) != len(paths):
         raise ValueError("JK2 humanoid animation assets missing")
     clips = decode(*(assets[path] for path in paths))
     dest = client / ".local" / "action-motion" / "jk2-survivor-v1.json"
