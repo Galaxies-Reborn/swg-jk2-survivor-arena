@@ -47,6 +47,35 @@ def rules(kernel):
     controls(fresh(), swing, dict(epoch=0, inputs=[tap, release]), k)
     assert swing["clip"] == CUTS[k.lib.saber_cut(0, 1, 0)] and swing["side"] == 0
     print("PASS directional swing survives same-tick strafe release")
+
+    def combo(next_side):
+        fighter = actor(1, 0, 0, 0)
+        state = fresh()
+
+        def frame(inputs):
+            state["clock"] += 1
+            controls(state, fighter, dict(epoch=0, inputs=inputs), k)
+
+        frame([dict(tap, button="")])
+        frame([release])
+        assert fighter["clip"] == "walk" and fighter["side"] == 0
+        frame([dict(release, button="attack")])
+        assert fighter["clip"] == "cut-right" and fighter["vx"] < 0
+        first = fighter["serial"]
+        for tick in range(1, 13):
+            frame([dict(tap, side=next_side)] if tick == 5 else [release])
+            if fighter["serial"] != first:
+                return tick, fighter["clip"]
+        raise AssertionError("Buffered cut did not start")
+
+    returning, mirrored = combo(-1)
+    rewinding, repeated = combo(1)
+    assert (mirrored, repeated) == ("cut-left", "cut-right") and returning < rewinding
+    print(
+        "PASS braking strafe into cut and buffered opposite/same-side links",
+        returning,
+        rewinding,
+    )
     from engine.navigation import Navigation
 
     nav = Navigation(ROOT / ".local/navigation.json")
@@ -326,6 +355,33 @@ def live(endpoint, wasm, kernel):
             time.sleep(0.2)
             own = next(r for r in b.rows() if r["mine"])
             assert own["health"] == 100 and "Score 0" in own["caption"]
+            a.send("attack", side=1)
+            end = time.monotonic() + 1.5
+            opener = None
+            while time.monotonic() < end:
+                peer = next(r for r in b.rows() if r["slot"] == 1)
+                if (
+                    peer["clip"] == "cut-right"
+                    and peer["elapsed_ms"] >= 250
+                    and opener is None
+                ):
+                    opener = peer["serial"]
+                    a.send("attack", side=-1)
+                if (
+                    opener is not None
+                    and peer["serial"] > opener
+                    and peer["clip"] == "cut-left"
+                ):
+                    break
+                time.sleep(0.012)
+            else:
+                raise AssertionError(
+                    "Peer did not observe the strafe cut and buffered return"
+                )
+            print(
+                "PASS second player observed right strafe cut into left return",
+                flush=True,
+            )
             b.leave()
             assert b.rows() == []
             assert not any(r["slot"] == 2 for r in a.rows())

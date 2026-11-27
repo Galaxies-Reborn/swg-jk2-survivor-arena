@@ -43,6 +43,21 @@ RETURN_CUT = dict(
         ),
     )
 )
+# Clockwise around the blade plane, starting at the top. Check the finish of
+# the current arc against the start of the requested arc, as in bg_saber.c.
+QUADRANTS = dict(
+    zip(CUTS, ((0, 4), (7, 3), (5, 1), (6, 2), (1, 5), (3, 7), (2, 6), (4, 4)))
+)
+
+
+def chain_age(current, following, duration):
+    gap = abs(QUADRANTS[current][1] - QUADRANTS[following][0])
+    steps = min(gap, 8 - gap)
+    # Finish the damaging sweep. Nearby starts use the follow-through;
+    # a blade that must cross the body spends longer in recovery.
+    return min(duration, math.ceil(duration * 0.72) + (steps + 1) // 2)
+
+
 VEC = ctypes.c_float * 3
 
 
@@ -134,6 +149,15 @@ def actor(slot, x, z, style):
 
 
 def start(a, clip, ticks, now):
+    if clip in ("stagger", "down"):
+        for field in (
+            "queued",
+            "queued_cut_axes",
+            "follow_until",
+            "last_cut",
+            "strafe_tick",
+        ):
+            a.pop(field, None)
     a.update(clip=clip, duration=ticks, age=0, serial=now, landed=[])
 
 
@@ -210,6 +234,7 @@ def shoot(s, p, k, charge):
 def controls(s, p, seat, k):
     now = s["clock"]
     if p["epoch"] != seat["epoch"]:
+        p.pop("strafe_tick", None)
         p.pop("follow_until", None)
         p.pop("riposte_until", None)
         p.pop("queued", None)
@@ -236,6 +261,8 @@ def controls(s, p, seat, k):
         p.update(forward=0, side=0, turn=0)
     if not p["health"]:
         return
+    if p["side"]:
+        p.update(strafe_axes=(p["forward"], p["side"]), strafe_tick=now)
     p["yaw"] = math.remainder(p["yaw"] - 0.10 * p["turn"], math.tau)
     k.move(p, p["forward"], p["side"])
     p["y"] = max(0.0, p["y"] + DT * p["vy"])
@@ -248,10 +275,49 @@ def controls(s, p, seat, k):
             start(p, "jump", 6, now)
     if p["clip"] == "jump" and "attack" in taps:
         p["duration"] = 0
+    current = p["clip"]
+    if (
+        current in CUTS
+        and p["age"] >= math.ceil(p["duration"] * 0.50)
+        and "attack" in taps
+    ):
+        if p.get("queued") in (None, "attack"):
+            p["queued"] = "attack"
+            if cut_axes != (0, 0) or not p.get("queued_cut_axes"):
+                p["queued_cut_axes"] = cut_axes
+    requested = None
+    if p["style"] == 0 and ("attack" in taps or p.get("queued") == "attack"):
+        forward, side = (
+            p.get("queued_cut_axes") or cut_axes or (p["forward"], p["side"])
+        )
+        following = p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
+        if (
+            not (forward or side)
+            and not following
+            and now - p.get("strafe_tick", -10) <= 2
+        ):
+            forward, side = p["strafe_axes"]
+        behind = (
+            forward < 0
+            and not side
+            and any(
+                e["health"]
+                and distance(p, e) < 1.9
+                and (e["x"] - p["x"]) * math.sin(p["yaw"])
+                + (e["z"] - p["z"]) * math.cos(p["yaw"])
+                < 0
+                for e in s["enemies"]
+            )
+        )
+        requested = (
+            RETURN_CUT[p["last_cut"]]
+            if following and not (forward or side)
+            else CUTS[k.lib.saber_cut(forward, side, int(behind))]
+        )
     chained = (
-        p["clip"] in CUTS
-        and p["age"] >= max(2, p["duration"] - 2)
-        and ("attack" in taps or p.get("queued") == "attack")
+        current in CUTS
+        and requested is not None
+        and p["age"] >= chain_age(current, requested, p["duration"])
     )
     counter = p.get("riposte_until", -1) >= now
     if chained or (counter and p["clip"] == "guard" and "attack" in taps):
@@ -268,13 +334,13 @@ def controls(s, p, seat, k):
                 p["queued"] = button
                 if button == "attack":
                     p["queued_cut_axes"] = cut_axes
+                else:
+                    p.pop("queued_cut_axes", None)
     else:
         queued = p.pop("queued", None)
-        queued_axes = p.pop("queued_cut_axes", None)
+        p.pop("queued_cut_axes", None)
         if queued:
             taps.insert(0, queued)
-            if queued == "attack" and queued_axes is not None:
-                cut_axes = queued_axes
         for b in taps:
             if b == "switch":
                 p["style"] = 1 - p["style"]
@@ -290,22 +356,7 @@ def controls(s, p, seat, k):
                 shoot(s, p, k, levels)
                 p["charge"] = 0
             elif b == "attack":
-                behind = any(
-                    e["health"] > 0
-                    and distance(p, e) < 1.9
-                    and (e["x"] - p["x"]) * math.sin(p["yaw"])
-                    + (e["z"] - p["z"]) * math.cos(p["yaw"])
-                    < 0
-                    for e in s["enemies"]
-                )
-                forward, side = cut_axes or (p["forward"], p["side"])
-                cut = k.lib.saber_cut(forward, side, int(behind))
-                clip = CUTS[cut]
-                following = (
-                    p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
-                )
-                if following and not (forward or side):
-                    clip = RETURN_CUT[p["last_cut"]]
+                clip = requested
                 if counter and forward > 0 and p["y"] == 0:
                     # Forward-only impulse, resolved by the regular movement and wall slide.
                     p["vx"] = 7.2 * math.sin(p["yaw"])
@@ -322,7 +373,7 @@ def controls(s, p, seat, k):
             if p["duration"]:
                 break
         if not p["duration"]:
-            p["clip"] = "walk" if p["forward"] or p["side"] else "idle"
+            p["clip"] = "walk" if math.hypot(p["vx"], p["vz"]) > 0.18 else "idle"
     p["age"] += 1
     if now % 4 == 0:
         p["energy"] = min(100, p["energy"] + 1)

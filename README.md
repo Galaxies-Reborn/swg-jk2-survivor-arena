@@ -21,6 +21,7 @@ For two computers, use `-Seats 1` on the host. Give player 2 only their own `pla
 | WASD, mouse | Run and aim |
 | V | Switch between the initial chase view and first person |
 | Left mouse | Swing a saber or fire the blaster. Hold attack and change movement direction to steer follow-up cuts. Neutral follow-ups reverse across the body. |
+| A or D, then left mouse | The opening cut keeps the strafe direction for 100 ms after release. For a return slash, press attack and the opposite strafe during the second half of the first swing. Repeating the same side takes longer to bring the blade back around. |
 | Right mouse with saber | Guard against a frontal attack. Blocking in the first 200 ms breaks the attacker’s swing. Click attack immediately for a riposte, holding W to lunge forward. |
 | Right mouse with blaster | Start charging. Left mouse fires the charged bolt. |
 | X, Space | Switch weapon, jump |

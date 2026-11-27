@@ -14,6 +14,8 @@ Changes made November 26, 2026, in `engine/jk2.c`:
 
 The worker also adapts the minimum control-speed ground friction and ground/air acceleration settings from the pinned bg_pmove.c. It integrates movement in five 10 ms steps per realm frame.
 
+The combo scheduler compares each cut's finishing quadrant to the next cut's starting quadrant, following the distinction in JK2's PM_SaberAnimTransitionAnim in bg_saber.c. Its buffer and recovery timings are specific to the arena's 20 Hz simulation and SWG animations.
+
 The published tree contains source and asset path names. Players obtain art, skeletal animation, weapons and scenery from their own SWG installation. Neither title's retail material is licensed by this repository.
 
 ## Distribution boundary
