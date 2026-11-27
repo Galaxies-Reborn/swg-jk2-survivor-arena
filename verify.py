@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from urllib.error import HTTPError
 from engine.arena import (
+    CUTS,
     Kernel,
     controls,
     blade_contact,
@@ -39,6 +40,13 @@ def rules(kernel):
     k.move(v, 0, 1)
     assert v["vx"] < 0 and v["vz"] == 0
     print("PASS ground acceleration, finite braking and strafe response")
+    # A key-up can arrive in the same worker tick as the mouse-down.
+    tap = dict(forward=0, side=1, turn=0, look=0, pitch=0, button="attack")
+    release = dict(tap, side=0, button="")
+    swing = actor(1, 0, 0, 0)
+    controls(fresh(), swing, dict(epoch=0, inputs=[tap, release]), k)
+    assert swing["clip"] == CUTS[k.lib.saber_cut(0, 1, 0)] and swing["side"] == 0
+    print("PASS directional swing survives same-tick strafe release")
     from engine.navigation import Navigation
 
     nav = Navigation(ROOT / ".local/navigation.json")

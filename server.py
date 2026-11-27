@@ -2,6 +2,8 @@
 
 import argparse
 import hashlib
+import io
+from http.client import HTTPConnection, HTTPException
 import ipaddress
 import json
 import sys
@@ -52,15 +54,47 @@ class Client:
             raise ValueError("Invalid database name")
         self.base = endpoint(profile["endpoint"]) + "/v1/database/" + db
         self.token = profile["token"]
+        address = urlsplit(self.base)
+        self.connection = HTTPConnection(address.hostname, address.port, timeout=4)
+        self.path = address.path
+
+    def request(self, suffix, body, media):
+        # Reuse the worker's loopback connection across simulation ticks. A
+        # failed write may already have committed. Recover on the next tick.
+        try:
+            self.connection.request(
+                "POST",
+                self.path + suffix,
+                body,
+                {"Authorization": "Bearer " + self.token, "Content-Type": media},
+            )
+            response = self.connection.getresponse()
+            payload = response.read(512 * 1024 + 1)
+            if len(payload) > 512 * 1024:
+                self.connection.close()
+                raise ValueError("Arena response exceeds budget")
+        except (OSError, HTTPException) as error:
+            self.connection.close()
+            raise URLError(error) from error
+        if not 200 <= response.status < 300:
+            raise HTTPError(
+                self.base + suffix,
+                response.status,
+                response.reason,
+                response.headers,
+                io.BytesIO(payload),
+            )
+        return json.loads(payload) if payload else None
 
     def call(self, name, args):
-        return http(self.base + "/call/" + name, json.dumps(args).encode(), self.token)
+        return self.request(
+            "/call/" + name, json.dumps(args).encode(), "application/json"
+        )
 
     def rows(self, name):
-        (table,) = http(
-            self.base + "/sql?confirmed=true",
+        (table,) = self.request(
+            "/sql?confirmed=true",
             ("SELECT * FROM " + name).encode(),
-            self.token,
             "text/plain",
         )
         fields = [c["name"]["some"] for c in table["schema"]["elements"]]
@@ -139,9 +173,15 @@ def serve(profile, library, navigation):
                 if isinstance(e, HTTPError)
                 else ""
             )
-            if isinstance(e, HTTPError) and "stale or early frame" not in detail:
-                if e.code < 500 or "simulation identity required" in detail:
-                    raise
+            if isinstance(e, HTTPError) and "stale or early frame" in detail:
+                # Keep the rejected inputs pending. Read the new revision and
+                # retry promptly instead of dropping a whole simulation tick.
+                time.sleep(0.005)
+                continue
+            if isinstance(e, HTTPError) and (
+                e.code < 500 or "simulation identity required" in detail
+            ):
+                raise
             failures += 1
             if failures == 1:
                 print("Waiting for a fresh committed frame", file=sys.stderr)

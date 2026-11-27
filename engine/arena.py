@@ -213,10 +213,12 @@ def controls(s, p, seat, k):
         p.pop("follow_until", None)
         p.pop("riposte_until", None)
         p.pop("queued", None)
+        p.pop("queued_cut_axes", None)
         p.update(
             epoch=seat["epoch"], forward=0, side=0, turn=0, charge=0, last_input=-20
         )
     taps = []
+    cut_axes = None
     yaw_input = pitch_input = 0
     for i in seat["inputs"]:
         p.update(forward=i["forward"], side=i["side"], turn=i["turn"], last_input=now)
@@ -224,6 +226,8 @@ def controls(s, p, seat, k):
         pitch_input += i["pitch"]
         if i["button"]:
             taps.append(i["button"])
+            if i["button"] == "attack" and cut_axes is None:
+                cut_axes = (i["forward"], i["side"])
     yaw_delta = max(-1800, min(1800, yaw_input)) / 100
     pitch_delta = max(-1800, min(1800, pitch_input)) / 100
     p["yaw"] = math.remainder(p["yaw"] - math.radians(yaw_delta), math.tau)
@@ -262,10 +266,15 @@ def controls(s, p, seat, k):
                 and not p.get("queued")
             ):
                 p["queued"] = button
+                if button == "attack":
+                    p["queued_cut_axes"] = cut_axes
     else:
         queued = p.pop("queued", None)
+        queued_axes = p.pop("queued_cut_axes", None)
         if queued:
             taps.insert(0, queued)
+            if queued == "attack" and queued_axes is not None:
+                cut_axes = queued_axes
         for b in taps:
             if b == "switch":
                 p["style"] = 1 - p["style"]
@@ -289,18 +298,19 @@ def controls(s, p, seat, k):
                     < 0
                     for e in s["enemies"]
                 )
-                cut = k.lib.saber_cut(p["forward"], p["side"], int(behind))
+                forward, side = cut_axes or (p["forward"], p["side"])
+                cut = k.lib.saber_cut(forward, side, int(behind))
                 clip = CUTS[cut]
                 following = (
                     p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
                 )
-                if following and not (p["forward"] or p["side"]):
+                if following and not (forward or side):
                     clip = RETURN_CUT[p["last_cut"]]
-                if counter and p["forward"] > 0 and p["y"] == 0:
+                if counter and forward > 0 and p["y"] == 0:
                     # Forward-only impulse, resolved by the regular movement and wall slide.
                     p["vx"] = 7.2 * math.sin(p["yaw"])
                     p["vz"] = 7.2 * math.cos(p["yaw"])
-                    clip = "up-right" if p["side"] >= 0 else "up-left"
+                    clip = "up-right" if side >= 0 else "up-left"
                 ticks = 6 if counter else 8 if following else 10
                 start(p, clip, ticks, now)
                 p.update(

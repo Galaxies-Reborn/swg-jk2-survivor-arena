@@ -47,6 +47,8 @@ The verifier provisions a fresh database and exercises two players, an outsider,
 
 ## Integration
 
+The client pack requests up to 14 cm of collision-limited movement preview while the next realm frame is in flight. The worker resolves player positions, contacts and damage. Directional saber attacks use the movement keys held when the attack was pressed, including buffered follow-up cuts. First-person swings advance on rendered frames between realm updates.
+
 Weapon swings, impacts, clashes and blaster shots use WAV samples in the local SWG content pack. The standalone Windows client uses the same ABI 10 swg_juce_audio.dll that ships beside the standard client executable.
 
 The client discovers `mods/swg-jk2-survivor-arena/action-pack.json`. Schema 2 adds first-person aim, per-style SWG appearances, multiple visible actors, short beam traces and an authoritative status line. Each view_swings entry names a clip and specifies windup and follow-through orientations in degrees (yaw, pitch, roll). The client interpolates these poses for the first-person weapon. A private seat profile supplies the endpoint and credential. `enter` opens an epoch, `input` accepts sequenced controls and `leave` closes it. The caller-specific `action_scene` supplies poses and presentation. Only the worker reads pending input and the recoverable checkpoint or submits a simulation frame. SpacetimeDB atomically fences stale commits, acknowledges consumed input and expires inactive seats independently of the worker.
