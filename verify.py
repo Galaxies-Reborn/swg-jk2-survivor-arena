@@ -11,6 +11,9 @@ from pathlib import Path
 from urllib.error import HTTPError
 from engine.arena import (
     CUTS,
+    JUMP_TICKS,
+    JUMP_PREP,
+    JUMP_FLIGHT,
     Kernel,
     controls,
     blade,
@@ -182,12 +185,16 @@ def rules(kernel):
             ],
         )
         state = fresh()
-        for tick in range(16):
+        for tick in range(JUMP_TICKS + 1):
             state["clock"] = tick
             controls(state, jumper, seat, k)
             seat["inputs"] = []
-            if tick < 15:
-                assert jumper["y"] > 0 and jumper["clip"] == clip, (tick, jumper)
+            assert (jumper["y"] > 0) == (JUMP_PREP <= tick < JUMP_PREP + JUMP_FLIGHT), (
+                tick,
+                jumper,
+            )
+            if tick < JUMP_TICKS:
+                assert jumper["clip"] == clip, (tick, jumper)
         assert jumper["y"] == 0 and jumper["clip"] in ("walk", "idle")
     print("PASS standing, forward, running and backward jump clips through landing")
     v = actor(1, -0.55, 0.0, 0)

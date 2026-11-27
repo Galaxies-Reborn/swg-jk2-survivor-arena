@@ -194,6 +194,7 @@ def decode(data, cfg, model, saber):
             [sum(row[j] * axis[j] for j in range(3)) for row in orientation]
         )
         return dict(
+            shoulders=unit("lhumerus", "rhumerus"),
             arms=[
                 unit("rradius", "rhumerus"),
                 unit("rhand", "rradius"),

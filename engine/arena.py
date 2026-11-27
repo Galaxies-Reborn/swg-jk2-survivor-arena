@@ -5,7 +5,9 @@ import math
 from pathlib import Path
 
 DT = 0.05
-JUMP_TICKS = 15  # First grounded tick at 4.4 m/s takeoff, 13 m/s² gravity and 20 Hz.
+JUMP_PREP = 4
+JUMP_FLIGHT = 15
+JUMP_TICKS = 36  # Includes crouch, flight, impact and the return to stance.
 SPAWN_RADIUS = 2.8
 CUTS = (
     "overhead",
@@ -185,6 +187,7 @@ def start(a, clip, ticks, now):
     a.pop("ready_origin", None)
     a.pop("steer_until", None)
     if clip in ("stagger", "down"):
+        a.pop("lift_tick", None)
         for field in (
             "queued",
             "queued_cut_axes",
@@ -303,18 +306,28 @@ def controls(s, p, seat, k):
     k.move(p, p["forward"], p["side"])
     p["y"] = max(0.0, p["y"] + DT * p["vy"])
     p["vy"] = p["vy"] - DT * 13.0 if p["y"] > 0 else 0.0
+    if now >= p.get("lift_tick", math.inf):
+        p.pop("lift_tick")
+        p.update(vy=4.4, y=0.001)
     # Jump is a movement action; it must not lock out a mid-air saber attack.
-    if "jump" in taps and p["y"] == 0 and p["clip"] != "stagger":
+    if (
+        "jump" in taps
+        and p["y"] == 0
+        and "lift_tick" not in p
+        and p["clip"] != "stagger"
+    ):
         jump = "jump"
         if p["forward"] > 0:
             jump = "jump-run" if math.hypot(p["vx"], p["vz"]) >= 2.5 else "jump-forward"
         elif p["forward"] < 0:
             jump = "jump-back"
-        p.update(vy=4.4, y=0.001, takeoff=now, jump_clip=jump)
+        p.update(lift_tick=now + JUMP_PREP, takeoff=now, jump_clip=jump)
         taps = [b for b in taps if b != "jump"]
-        if not p["duration"] and "attack" not in taps:
+        if (not p["duration"] or p["clip"].startswith("jump")) and "attack" not in taps:
             start(p, jump, JUMP_TICKS, now)
-    if p["clip"].startswith("jump") and "attack" in taps:
+    if p["clip"].startswith("jump") and any(
+        b in ("attack", "guard", "switch") for b in taps
+    ):
         p["duration"] = 0
     current = p["clip"]
     if current.startswith("ready-") and current[6:] in CUTS:
@@ -807,7 +820,11 @@ def step(state, seats, k):
         if a["style"] == 2 and a["clip"] == "overhead":
             view["clip"] = "staff-strike"
         view.update(
-            elapsed_ms=min(a["age"], a["duration"]) * 50, duration_ms=a["duration"] * 50
+            elapsed_ms=min(
+                max(0, a["age"] - int(a["clip"].startswith("jump"))), a["duration"]
+            )
+            * 50,
+            duration_ms=a["duration"] * 50,
         )
         actors.append(view)
     return s, dict(actors=actors, caption=caption, trails=trails)
