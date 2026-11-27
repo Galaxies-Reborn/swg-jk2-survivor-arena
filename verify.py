@@ -33,13 +33,39 @@ def rules(kernel):
     for cut, opposite in (("cut-left", "cut-right"), ("cut-right", "cut-left")):
         start, end = swings[cut]
         assert end == swings[opposite][0] and swings["ready-" + cut] == [start, start]
-        # Equal pitch and zero roll make the camera-space quaternion interpolation
-        # a yaw sweep. Check blade-tip depth relative to the emitter throughout.
-        assert start[1:] == end[1:] and start[2] == 0 and abs(end[0] - start[0]) < 180
-        for sample in range(101):
-            yaw = math.radians(start[0] + (end[0] - start[0]) * sample / 100)
-            assert math.cos(yaw) * math.sin(math.radians(start[1])) > 0.35
-    print("PASS both lateral arcs stay forward and share their return poses")
+
+        def blade_axis(angles):
+            yaw, pitch, roll = map(math.radians, angles)
+            x = -math.sin(roll)
+            y = math.cos(pitch) * math.cos(roll)
+            z = math.sin(pitch) * math.cos(roll)
+            return (
+                math.cos(yaw) * x + math.sin(yaw) * z,
+                y,
+                -math.sin(yaw) * x + math.cos(yaw) * z,
+            )
+
+        first, last = blade_axis(start), blade_axis(end)
+        assert first[0] * last[0] < -0.25 and first[2] > 0.7
+
+        # The entire grip orientation rotates about view Z: all three entries
+        # of its depth row must be identical for start and finish. This makes
+        # slerp preserve the depth of every point on the rigid blade.
+        def depth_row(angles):
+            yaw, pitch, roll = map(math.radians, angles)
+            return (
+                -math.sin(yaw) * math.cos(roll)
+                + math.cos(yaw) * math.sin(pitch) * math.sin(roll),
+                blade_axis(angles)[2],
+                math.cos(yaw) * math.cos(pitch),
+            )
+
+        assert (
+            max(abs(a - b) for a, b in zip(depth_row(start), depth_row(end))) < 0.00001
+        )
+    print(
+        "PASS horizontal swipes cross the view, preserve blade depth, and share their return poses"
+    )
     k = Kernel(kernel)
     v = actor(1, 0, 0, 0)
     k.move(v, 1, 1)
