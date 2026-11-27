@@ -137,6 +137,16 @@ def live(endpoint, wasm, kernel):
 
         proc = launch()
         try:
+            b.send("jump", pitch=500)
+            aim_time = time.monotonic() + 2
+            while time.monotonic() < aim_time:
+                peer = next((r for r in a.rows() if r["slot"] == 2), None)
+                if peer and peer["y"] > 0.05 and peer["pitch"] < -0.05:
+                    break
+                time.sleep(0.025)
+            assert peer and peer["y"] > 0.05 and peer["pitch"] < -0.05
+            b.send(pitch=-500)
+            print("PASS peer-visible first-person pitch and jump", flush=True)
             start = time.monotonic()
             switched = False
             reached = False

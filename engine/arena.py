@@ -158,16 +158,22 @@ def shoot(s, p, k, charge):
 def controls(s, p, seat, k):
     now = s["clock"]
     if p["epoch"] != seat["epoch"]:
+        p.pop("queued", None)
         p.update(
             epoch=seat["epoch"], forward=0, side=0, turn=0, charge=0, last_input=-20
         )
     taps = []
+    yaw_input = pitch_input = 0
     for i in seat["inputs"]:
         p.update(forward=i["forward"], side=i["side"], turn=i["turn"], last_input=now)
-        p["yaw"] = math.remainder(p["yaw"] - math.radians(i["look"] / 100), math.tau)
-        p["pitch"] = max(-1.28, min(1.28, p["pitch"] - math.radians(i["pitch"] / 100)))
+        yaw_input += i["look"]
+        pitch_input += i["pitch"]
         if i["button"]:
             taps.append(i["button"])
+    yaw_delta = max(-1800, min(1800, yaw_input)) / 100
+    pitch_delta = max(-1800, min(1800, pitch_input)) / 100
+    p["yaw"] = math.remainder(p["yaw"] - math.radians(yaw_delta), math.tau)
+    p["pitch"] = max(-1.28, min(1.28, p["pitch"] - math.radians(pitch_delta)))
     if now - p["last_input"] > 5:
         p.update(forward=0, side=0, turn=0)
     if not p["health"]:
@@ -178,7 +184,14 @@ def controls(s, p, seat, k):
     p["vy"] = p["vy"] - DT * 13.0 if p["y"] > 0 else 0.0
     if p["duration"] and p["age"] >= p["duration"]:
         start(p, "idle", 0, now)
-    if p["duration"] == 0:
+    if p["duration"]:
+        for button in taps:
+            if button in ("switch", "guard", "jump"):
+                p["queued"] = button
+    else:
+        queued = p.pop("queued", None)
+        if queued:
+            taps.insert(0, queued)
         for b in taps:
             if b == "switch":
                 p["style"] = 1 - p["style"]
@@ -223,7 +236,7 @@ def melee(p, enemies, now):
     start_yaw, end_yaw, top, bottom = SWEEPS[CUTS.index(p["clip"])]
     for sample in range(5):
         t = (p["age"] - 2 + sample / 4) / 5
-        yaw = p["yaw"] + start_yaw + (end_yaw - start_yaw) * t
+        yaw = p["yaw"] - (start_yaw + (end_yaw - start_yaw) * t)
         height = p["y"] + top + (bottom - top) * t
         for e in enemies:
             if e["slot"] in p["landed"] or not e["health"]:
