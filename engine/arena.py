@@ -50,10 +50,33 @@ QUADRANTS = dict(
 )
 
 
-def reposition_ticks(current, following):
-    gap = abs(QUADRANTS[current][1] - QUADRANTS[following][0])
-    steps = min(gap, 8 - gap)
-    return (steps + 1) // 2
+def sector_delta(origin, target):
+    return (target - origin + 4) % 8 - 4
+
+
+def prepare_cut(p, origin, clip, now, steer_until):
+    travel = math.ceil(abs(sector_delta(origin, QUADRANTS[clip][0])) / 2)
+    if travel:
+        start(p, "ready-" + clip, travel + 1, now)
+        p.update(ready_origin=origin, steer_until=steer_until)
+    else:
+        attack(p, clip, 8, now, lead=1)
+
+
+def directional_cut(k, p, enemies, forward, side):
+    behind = (
+        forward < 0
+        and not side
+        and any(
+            e["health"]
+            and distance(p, e) < 1.9
+            and (e["x"] - p["x"]) * math.sin(p["yaw"])
+            + (e["z"] - p["z"]) * math.cos(p["yaw"])
+            < 0
+            for e in enemies
+        )
+    )
+    return CUTS[k.lib.saber_cut(forward, side, int(behind))]
 
 
 def attack(p, clip, ticks, now, *, counter=False, lead=0):
@@ -158,6 +181,8 @@ def actor(slot, x, z, style):
 
 
 def start(a, clip, ticks, now):
+    a.pop("ready_origin", None)
+    a.pop("steer_until", None)
     if clip in ("stagger", "down"):
         for field in (
             "queued",
@@ -244,6 +269,7 @@ def controls(s, p, seat, k):
     now = s["clock"]
     if p["epoch"] != seat["epoch"]:
         p.pop("strafe_tick", None)
+        p.pop("steer_until", None)
         p.pop("follow_until", None)
         p.pop("riposte_until", None)
         p.pop("queued", None)
@@ -254,8 +280,12 @@ def controls(s, p, seat, k):
     taps = []
     cut_axes = None
     release_axes = None
+    steer_axes = None
     yaw_input = pitch_input = 0
     for i in seat["inputs"]:
+        axes = (i["forward"], i["side"])
+        if any(axes) and (axes != (p["forward"], p["side"]) or i["button"] == "attack"):
+            steer_axes = axes
         p.update(forward=i["forward"], side=i["side"], turn=i["turn"], last_input=now)
         if i["side"]:
             p.update(strafe_axes=(i["forward"], i["side"]), strafe_tick=now)
@@ -294,12 +324,27 @@ def controls(s, p, seat, k):
         if "guard" in taps or "switch" in taps:
             taps = [button for button in taps if button in ("guard", "switch")]
             start(p, "idle", 0, now)
-        elif p["age"] >= p["duration"]:
-            # The blade has reached the start quadrant. Continue the committed
-            # strike even if the player released the mouse during the link.
-            attack(p, current[6:], 8, now, lead=1)
-            taps.clear()
         else:
+            dest = current[6:]
+            redirect = (
+                steer_axes
+                and now <= p.get("steer_until", -1)
+                and p["age"] < p["duration"]
+            )
+            desired = (
+                directional_cut(k, p, s["enemies"], *steer_axes) if redirect else dest
+            )
+            if desired != dest:
+                # Turn from the current blade sector; the original deadline
+                # stays fixed so fresh input cannot prolong recovery forever.
+                origin = p["ready_origin"]
+                fraction = p["age"] / p["duration"]
+                sector = (
+                    origin + sector_delta(origin, QUADRANTS[dest][0]) * fraction
+                ) % 8
+                prepare_cut(p, sector, desired, now, p["steer_until"])
+            elif p["age"] >= p["duration"]:
+                attack(p, dest, 8, now, lead=1)
             taps.clear()
         current = p["clip"]
     if (
@@ -311,6 +356,8 @@ def controls(s, p, seat, k):
             p["queued"] = "attack"
             if cut_axes != (0, 0) or not p.get("queued_cut_axes"):
                 p["queued_cut_axes"] = cut_axes
+    if current in CUTS and p.get("queued") == "attack" and steer_axes:
+        p["queued_cut_axes"] = steer_axes
     requested = None
     if p["style"] == 0 and ("attack" in taps or p.get("queued") == "attack"):
         forward, side = (
@@ -319,22 +366,10 @@ def controls(s, p, seat, k):
         following = p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
         if not (forward or side) and not following and release_axes is not None:
             forward, side = release_axes
-        behind = (
-            forward < 0
-            and not side
-            and any(
-                e["health"]
-                and distance(p, e) < 1.9
-                and (e["x"] - p["x"]) * math.sin(p["yaw"])
-                + (e["z"] - p["z"]) * math.cos(p["yaw"])
-                < 0
-                for e in s["enemies"]
-            )
-        )
         requested = (
             RETURN_CUT[p["last_cut"]]
             if following and not (forward or side)
-            else CUTS[k.lib.saber_cut(forward, side, int(behind))]
+            else directional_cut(k, p, s["enemies"], forward, side)
         )
     chained = (
         current in CUTS
@@ -344,8 +379,8 @@ def controls(s, p, seat, k):
         and "guard" not in taps
         and "switch" not in taps
     )
-    if chained and (travel := reposition_ticks(current, requested)):
-        start(p, "ready-" + requested, travel + 1, now)
+    if chained and QUADRANTS[current][1] != QUADRANTS[requested][0]:
+        prepare_cut(p, QUADRANTS[current][1], requested, now, now + 2)
         p.pop("queued", None)
         p.pop("queued_cut_axes", None)
         taps.clear()

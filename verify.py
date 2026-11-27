@@ -58,6 +58,32 @@ def rules(kernel):
         assert swing["clip"] == expected
     print("PASS directional swing survives same-tick strafe release")
 
+    # Reverse during a committed preparation using movement alone. The current
+    # strike stays immutable and the redirected preparation survives a reload.
+    state = fresh()
+    fighter = actor(1, 0, 0, 0)
+
+    def advance(command):
+        state["clock"] += 1
+        controls(state, fighter, dict(epoch=0, inputs=[command]), k)
+
+    advance(tap)
+    opening = fighter["serial"]
+    while fighter["clip"] == "cut-right" and state["clock"] < 15:
+        advance(tap)
+    assert fighter["clip"] == "ready-cut-right"
+    advance(dict(strafe, side=-1))
+    assert fighter["clip"] == "ready-cut-left" and blade(fighter, 0.5) is None
+    fighter = json.loads(json.dumps(fighter))
+    for _ in range(4):
+        advance(release)
+        if fighter["clip"] == "cut-left":
+            break
+    assert fighter["clip"] == "cut-left" and fighter["serial"] > opening
+    print(
+        "PASS movement-only redirect during saber preparation after checkpoint restore"
+    )
+
     def combo(next_side):
         fighter = actor(1, 0, 0, 0)
         state = fresh()
@@ -424,6 +450,27 @@ def live(endpoint, wasm, kernel):
                     "Peer did not see the blade recover before the repeated cut"
                 )
             print("PASS peer-visible blade recovery and repeated left cut", flush=True)
+            previous = peer["serial"]
+            ordered = redirected = False
+            end = time.monotonic() + 1.4
+            while time.monotonic() < end:
+                peer = next(r for r in b.rows() if r["slot"] == 1)
+                if (
+                    not ordered
+                    and peer["serial"] == previous
+                    and peer["elapsed_ms"] >= 150
+                ):
+                    a.send("attack", side=-1)
+                    ordered = True
+                elif not redirected and peer["clip"] == "ready-cut-left":
+                    a.send(side=1)
+                    redirected = True
+                elif redirected and peer["clip"] == "cut-right":
+                    break
+                time.sleep(0.008)
+            else:
+                raise AssertionError("Peer did not observe the movement-only redirect")
+            print("PASS peer-visible mid-combo strafe reversal", flush=True)
             b.leave()
             assert b.rows() == []
             assert not any(r["slot"] == 2 for r in a.rows())
