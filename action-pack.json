@@ -9,7 +9,7 @@
     -0.895,
     -17
   ],
-  "appearance": "appearance/luke_skywalker.sat",
+  "appearance": "appearance/stormtrooper.sat",
   "styles": [
     "Lightsaber",
     "Blaster",
@@ -95,5 +95,127 @@
   "first_person": true,
   "appearances": {
     "2": "appearance/tusken_raider_m.sat"
+  },
+  "view_swings": {
+    "overhead": [
+      [
+        0,
+        -38,
+        8
+      ],
+      [
+        0,
+        105,
+        8
+      ]
+    ],
+    "cut-right": [
+      [
+        55,
+        62,
+        -60
+      ],
+      [
+        -55,
+        75,
+        62
+      ]
+    ],
+    "cut-left": [
+      [
+        -55,
+        62,
+        60
+      ],
+      [
+        55,
+        75,
+        -62
+      ]
+    ],
+    "up-right": [
+      [
+        48,
+        106,
+        -54
+      ],
+      [
+        -45,
+        30,
+        52
+      ]
+    ],
+    "down-right": [
+      [
+        46,
+        18,
+        -42
+      ],
+      [
+        -48,
+        110,
+        52
+      ]
+    ],
+    "up-left": [
+      [
+        -48,
+        106,
+        54
+      ],
+      [
+        45,
+        30,
+        -52
+      ]
+    ],
+    "down-left": [
+      [
+        -46,
+        18,
+        42
+      ],
+      [
+        48,
+        110,
+        -52
+      ]
+    ],
+    "back": [
+      [
+        -80,
+        64,
+        -80
+      ],
+      [
+        70,
+        78,
+        80
+      ]
+    ],
+    "guard": [
+      [
+        5,
+        16,
+        -62
+      ],
+      [
+        8,
+        20,
+        -65
+      ]
+    ],
+    "fire": [
+      [
+        0,
+        6,
+        10
+      ],
+      [
+        0,
+        30,
+        14
+      ]
+    ]
   }
 }

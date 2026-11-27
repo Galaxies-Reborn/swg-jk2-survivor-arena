@@ -6,7 +6,7 @@ The server runs compiled combat and movement routines from Jedi Outcast 1.04. Th
 
 ## Play on Windows
 
-Use a Bevy client with action-pack schema 2 support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
+Use a Bevy client with action-pack schema 2 and first-person view_swings support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
 
 ```powershell
 ./Start-Arena.ps1 -Standalone '<path to spacetimedb-standalone.exe>' -ClientRoot '<game client root>'
@@ -46,6 +46,6 @@ The verifier provisions a fresh database and exercises two players, an outsider,
 
 ## Integration
 
-The client discovers `mods/swg-jk2-survivor-arena/action-pack.json`. Schema 2 adds first-person aim, per-style SWG appearances, multiple visible actors, short beam traces and an authoritative status line. A private seat profile supplies the endpoint and credential. `enter` opens an epoch, `input` accepts sequenced controls and `leave` closes it. The caller-specific `action_scene` supplies poses and presentation. Only the worker reads pending input and the recoverable checkpoint or submits a simulation frame. SpacetimeDB atomically fences stale commits, acknowledges consumed input and expires inactive seats independently of the worker.
+The client discovers `mods/swg-jk2-survivor-arena/action-pack.json`. Schema 2 adds first-person aim, per-style SWG appearances, multiple visible actors, short beam traces and an authoritative status line. Each view_swings entry names a clip and specifies windup and follow-through orientations in degrees (yaw, pitch, roll). The client interpolates these poses for the first-person weapon. A private seat profile supplies the endpoint and credential. `enter` opens an epoch, `input` accepts sequenced controls and `leave` closes it. The caller-specific `action_scene` supplies poses and presentation. Only the worker reads pending input and the recoverable checkpoint or submits a simulation frame. SpacetimeDB atomically fences stale commits, acknowledges consumed input and expires inactive seats independently of the worker.
 
 To uninstall, close the mode and remove its installed presentation and seat profiles. If the mod is installed as a Git submodule, deinitialize that submodule. Host state can be retained for a later session. The private client, its Git history and game assets are outside this repository.
