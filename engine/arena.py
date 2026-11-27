@@ -26,6 +26,23 @@ SWEEPS = (
     (1.35, -1.35, 1.15, 1.15),
     (math.pi - 0.55, math.pi + 0.55, 1.0, 1.0),
 )
+# A connected cut can reverse along its incoming arc. Neutral input alternates
+# sides after the opener. Directional input still selects the next JK2 cut.
+RETURN_CUT = dict(
+    zip(
+        CUTS,
+        (
+            "cut-right",
+            "up-left",
+            "down-left",
+            "cut-left",
+            "up-right",
+            "down-right",
+            "cut-right",
+            "overhead",
+        ),
+    )
+)
 VEC = ctypes.c_float * 3
 
 
@@ -144,7 +161,10 @@ def spawn_wave(s, nav=None):
                 if surface:
                     e.update(x=x, z=z, cell=surface[0], ground=surface[1])
                     break
-        e["health"] = min(100, 20 + 5 * s["wave"])
+        if i == 0 or (i >= 4 and i % 4 == 0):
+            e.update(style=0, health=min(100, 52 + 4 * s["wave"]))
+        else:
+            e["health"] = min(100, 20 + 5 * s["wave"])
         s["enemies"].append(e)
     s["phase"] = "fighting"
 
@@ -156,7 +176,7 @@ def distance(a, b):
 def hurt(target, amount, now):
     target["health"] = max(0, target["health"] - amount)
     if not target["health"]:
-        start(target, "down", 0, now)
+        start(target, "down", 16, now)
 
 
 def shoot(s, p, k, charge):
@@ -178,6 +198,8 @@ def shoot(s, p, k, charge):
 def controls(s, p, seat, k):
     now = s["clock"]
     if p["epoch"] != seat["epoch"]:
+        p.pop("follow_until", None)
+        p.pop("riposte_until", None)
         p.pop("queued", None)
         p.update(
             epoch=seat["epoch"], forward=0, side=0, turn=0, charge=0, last_input=-20
@@ -202,11 +224,27 @@ def controls(s, p, seat, k):
     k.move(p, p["forward"], p["side"])
     p["y"] = max(0.0, p["y"] + DT * p["vy"])
     p["vy"] = p["vy"] - DT * 13.0 if p["y"] > 0 else 0.0
+    # Jump is a movement action; it must not lock out a mid-air saber attack.
+    if "jump" in taps and p["y"] == 0 and p["clip"] != "stagger":
+        p.update(vy=4.4, y=0.001)
+        taps = [b for b in taps if b != "jump"]
+        if not p["duration"] and "attack" not in taps:
+            start(p, "jump", 6, now)
+    if p["clip"] == "jump" and "attack" in taps:
+        p["duration"] = 0
+    chained = (
+        p["clip"] in CUTS
+        and p["age"] >= max(2, p["duration"] - 2)
+        and ("attack" in taps or p.get("queued") == "attack")
+    )
+    counter = p.get("riposte_until", -1) >= now
+    if chained or (counter and p["clip"] == "guard" and "attack" in taps):
+        p["duration"] = 0
     if p["duration"] and p["age"] >= p["duration"]:
         start(p, "idle", 0, now)
     if p["duration"]:
         for button in taps:
-            if button in ("switch", "guard", "jump") or (
+            if button in ("switch", "guard") or (
                 button == "attack"
                 and p["duration"] - p["age"] <= 3
                 and not p.get("queued")
@@ -221,10 +259,6 @@ def controls(s, p, seat, k):
                 p["style"] = 1 - p["style"]
                 p["charge"] = 0
                 start(p, "idle", 3, now)
-            elif b == "jump" and p["y"] == 0:
-                p["vy"] = 4.4
-                p["y"] = 0.001
-                start(p, "jump", 6, now)
             elif b == "guard" and p["style"] == 0 and p["energy"] >= 8:
                 p["energy"] -= 8
                 start(p, "guard", 10, now)
@@ -244,7 +278,25 @@ def controls(s, p, seat, k):
                     for e in s["enemies"]
                 )
                 cut = k.lib.saber_cut(p["forward"], p["side"], int(behind))
-                start(p, CUTS[cut], 9, now)
+                clip = CUTS[cut]
+                following = (
+                    p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
+                )
+                if following and not (p["forward"] or p["side"]):
+                    clip = RETURN_CUT[p["last_cut"]]
+                if counter and p["forward"] > 0 and p["y"] == 0:
+                    # Forward-only impulse, resolved by the regular movement and wall slide.
+                    p["vx"] = 7.2 * math.sin(p["yaw"])
+                    p["vz"] = 7.2 * math.cos(p["yaw"])
+                    clip = "up-right" if p["side"] >= 0 else "up-left"
+                ticks = 6 if counter else 8 if following else 10
+                start(p, clip, ticks, now)
+                p.update(
+                    last_cut=clip,
+                    follow_until=now + ticks + 2,
+                    strike_damage=44 if counter else 32,
+                    riposte_until=-1,
+                )
             if p["duration"]:
                 break
         if not p["duration"]:
@@ -254,28 +306,137 @@ def controls(s, p, seat, k):
         p["energy"] = min(100, p["energy"] + 1)
 
 
+def faces(actor, target):
+    dx, dz = target["x"] - actor["x"], target["z"] - actor["z"]
+    return dx * math.sin(actor["yaw"]) + dz * math.cos(
+        actor["yaw"]
+    ) >= 0.3 * math.hypot(dx, dz)
+
+
+def push(actor, attacker, amount, nav):
+    dx, dz = actor["x"] - attacker["x"], actor["z"] - attacker["z"]
+    scale = amount / max(0.01, math.hypot(dx, dz))
+    if nav:
+        nav.slide(actor, dx * scale, dz * scale)
+    else:
+        actor["x"] += dx * scale
+        actor["z"] += dz * scale
+
+
+def blade(actor, frame_fraction):
+    """Return a hilt and tip at the same sub-frame time for both combatants."""
+    if actor["clip"] not in CUTS:
+        return None
+    phase = (actor["age"] - 1 + frame_fraction) / (actor["duration"] or 9)
+    if not 0.22 <= phase <= 0.72:
+        return None
+    t = (phase - 0.22) / 0.50
+    start_yaw, end_yaw, top, bottom = SWEEPS[CUTS.index(actor["clip"])]
+    yaw = actor["yaw"] - start_yaw - (end_yaw - start_yaw) * t
+    pitch = actor["pitch"]
+    y = actor["y"] + actor.get("ground", 0.0) + top + (bottom - top) * t
+
+    def point(distance):
+        horizontal = distance * math.cos(pitch)
+        return (
+            actor["x"] + horizontal * math.sin(yaw),
+            y + distance * math.sin(pitch),
+            actor["z"] + horizontal * math.cos(yaw),
+        )
+
+    return point(0.18), point(1.65)
+
+
+def blade_contact(a, b):
+    # Closest points on two finite 3D segments, including parallel overlap.
+    (p, q), (r, s) = a, b
+    u = tuple(y - x for x, y in zip(p, q))
+    v = tuple(y - x for x, y in zip(r, s))
+    w = tuple(x - y for x, y in zip(p, r))
+
+    def dot(x, y):
+        return sum(i * j for i, j in zip(x, y))
+
+    def unit(t):
+        return min(1.0, max(0.0, t))
+
+    uu, uv, vv, uw, vw = dot(u, u), dot(u, v), dot(v, v), dot(u, w), dot(v, w)
+    det = uu * vv - uv * uv
+    along = unit((uv * vw - vv * uw) / det) if det > 1e-8 else 0.0
+    other = unit((uv * along + vw) / vv)
+    along = unit((uv * other - uw) / uu)
+    left = tuple(x + along * d for x, d in zip(p, u))
+    right = tuple(x + other * d for x, d in zip(r, v))
+    if math.dist(left, right) <= 0.095:
+        return [(x + y) * 0.5 for x, y in zip(left, right)]
+
+
 def melee(p, enemies, now, nav=None):
-    if p["clip"] not in CUTS or not 2 <= p["age"] <= 6:
+    if p["clip"] not in CUTS:
         return
-    start_yaw, end_yaw, top, bottom = SWEEPS[CUTS.index(p["clip"])]
     for sample in range(5):
-        t = (p["age"] - 2 + sample / 4) / 5
-        yaw = p["yaw"] - (start_yaw + (end_yaw - start_yaw) * t)
-        height = p["y"] + top + (bottom - top) * t
+        fraction = sample / 4
+        segment = blade(p, fraction)
+        if not segment:
+            continue
+        hilt, tip = segment
         for e in enemies:
             if e["slot"] in p["landed"] or not e["health"]:
                 continue
-            dx, dz = e["x"] - p["x"], e["z"] - p["z"]
-            along = max(0.0, min(1.65, dx * math.sin(yaw) + dz * math.cos(yaw)))
-            if (
-                0.2 <= height <= 1.82
-                and math.hypot(dx - along * math.sin(yaw), dz - along * math.cos(yaw))
+            if distance(p, e) > 3.4:
+                continue
+            other = blade(e, fraction) if e["style"] == 0 else None
+            if other:
+                contact = blade_contact(segment, other)
+                if contact and (not nav or nav.clear(p, e)):
+                    for fighter in (p, e):
+                        start(fighter, "stagger", 4, now)
+                        fighter["follow_until"] = -1
+                    e["clash"] = [now, *contact]
+                    return
+            dx, dz = tip[0] - hilt[0], tip[2] - hilt[2]
+            along = max(
+                0.0,
+                min(
+                    1.0,
+                    ((e["x"] - hilt[0]) * dx + (e["z"] - hilt[2]) * dz)
+                    / (dx * dx + dz * dz),
+                ),
+            )
+            height = (
+                hilt[1] + along * (tip[1] - hilt[1]) - e["y"] - e.get("ground", 0.0)
+            )
+            if not (
+                0.1 <= height <= 1.88
+                and math.hypot(
+                    e["x"] - hilt[0] - along * dx, e["z"] - hilt[2] - along * dz
+                )
                 <= 0.45
             ):
-                if nav and not nav.clear(p, e):
-                    continue
-                hurt(e, 32, now)
-                p["landed"].append(e["slot"])
+                continue
+            if nav and not nav.clear(p, e):
+                continue
+            p["landed"].append(e["slot"])
+            if e["clip"] == "guard" and faces(e, p):
+                e["clash"] = [
+                    now,
+                    (p["x"] + e["x"]) * 0.5,
+                    e.get("ground", 0.0) + e["y"] + 1.2,
+                    (p["z"] + e["z"]) * 0.5,
+                ]
+                if e["age"] <= 4:
+                    start(p, "stagger", 7, now)
+                    p["follow_until"] = -1
+                    e["riposte_until"] = now + 7
+                    push(p, e, 0.20, nav)
+                    return
+                continue
+            damage = p.get("strike_damage", 32 if p["slot"] <= 2 else 12)
+            hurt(e, damage, now)
+            if e["health"]:
+                start(e, "stagger", 4, now)
+                e["follow_until"] = -1
+            push(e, p, 0.18, nav)
 
 
 def projectiles(s, nav=None):
@@ -335,13 +496,32 @@ def pursue(s, e, players, nav=None):
     p = min(players, key=lambda a: (distance(e, a), a["slot"]))
     dx, dz = p["x"] - e["x"], p["z"] - e["z"]
     dist = math.hypot(dx, dz)
-    e["yaw"] = math.atan2(dx, dz)
+    # Commit the facing at the beginning of a cut so its telegraph can be dodged.
+    if e["clip"] not in CUTS:
+        e["yaw"] = math.atan2(dx, dz)
     e["age"] += 1
+    if e["style"] == 0:
+        if e["clip"] in CUTS:
+            melee(e, players, now, nav)
+        if e.get("riposte_until", -1) >= now and e["clip"] == "guard":
+            start(e, "cut-left", 9, now)
+            e["riposte_until"] = -1
+        if (
+            not e["duration"]
+            and p["clip"] in CUTS
+            and dist < 1.9
+            and now >= e.get("guard_ready", 0)
+            and faces(e, p)
+        ):
+            start(e, "guard", 7, now)
+            e["guard_ready"] = now + 28
+            return
     if e["duration"] and e["age"] >= e["duration"]:
         start(e, "idle", 0, now)
     if e["duration"]:
         if (
-            e["clip"] == "overhead"
+            e["style"] == 2
+            and e["clip"] == "overhead"
             and e["age"] == 6
             and dist < 1.25
             and p["y"] < 0.8
@@ -350,17 +530,36 @@ def pursue(s, e, players, nav=None):
             facing = -dx * math.sin(p["yaw"]) - dz * math.cos(p["yaw"])
             if p["clip"] == "guard" and facing >= 0.2 * dist:
                 start(e, "stagger", 13, now)
+                if p["age"] <= 4:
+                    p["riposte_until"] = now + 7
             else:
                 hurt(p, min(25, 6 + s["wave"]), now)
         return
-    if dist <= 0.97:
-        start(e, "overhead", 20, now)
+    if dist <= (1.48 if e["style"] == 0 else 0.97) and (not nav or nav.clear(e, p)):
+        if e["style"] == 0:
+            sequence = ("down-right", "cut-left", "overhead", "up-right")
+            index = e.get("cut_index", 0)
+            start(e, sequence[index % len(sequence)], 13, now)
+            e["cut_index"] = index + 1
+        else:
+            start(e, "overhead", 20, now)
     else:
-        speed = min(2.3, 0.68 + s["wave"] * 0.10) * DT
+        speed = (2.6 if e["style"] == 0 else min(2.3, 1.05 + s["wave"] * 0.10)) * DT
         if nav:
             wx, wz = nav.waypoint(e, p)
             dx, dz = wx - e["x"], wz - e["z"]
             length = max(speed, math.hypot(dx, dz))
+            dx, dz = dx / length, dz / length
+            for ally in s["enemies"]:
+                if ally is e or not ally["health"] or ally.get("cell") != e.get("cell"):
+                    continue
+                sx, sz = e["x"] - ally["x"], e["z"] - ally["z"]
+                gap = math.hypot(sx, sz)
+                if 0.001 < gap < 0.75:
+                    weight = (0.75 - gap) / gap
+                    dx += sx * weight
+                    dz += sz * weight
+            length = max(1.0, math.hypot(dx, dz))
             nav.slide(e, dx / length * speed, dz / length * speed)
             e["yaw"] = math.atan2(dx, dz)
         else:
@@ -405,7 +604,7 @@ def step(state, seats, k):
         if not any(p["health"] for p in active):
             s["phase"] = "defeat"
         elif not remaining:
-            s.update(phase="intermission", wait=50, enemies=[], bolts=[])
+            s.update(phase="intermission", wait=50, bolts=[])
             for p in s["players"].values():
                 p["health"] = min(100, p["health"] + 35)
                 start(p, "idle", 0, s["clock"])
@@ -416,7 +615,31 @@ def step(state, seats, k):
     if s["phase"] == "defeat":
         caption += "  |  Party defeated. Press R to restart."
     actors = []
-    for a in active + enemies:
+    falling = [
+        e
+        for e in s["enemies"]
+        if not e["health"]
+        and 0 <= s["clock"] - e["serial"] < 16
+        and e["clip"] == "down"
+    ]
+    for e in falling:
+        e["age"] = s["clock"] - e["serial"]
+    for a in active + enemies + falling:
+        clash = a.get("clash")
+        if clash and len(trails) <= 29 and 0 <= s["clock"] - clash[0] <= 2:
+            tick, x, y, z = clash
+            spread = 0.07 + 0.055 * (s["clock"] - tick)
+            for dx, dy, dz in ((1, 0.8, -0.4), (-0.7, 0.6, 0.9), (0.2, -1, 0.8)):
+                trails.append(
+                    [
+                        x + dx * spread,
+                        y + dy * spread,
+                        z + dz * spread,
+                        x + dx * (spread + 0.12),
+                        y + dy * (spread + 0.12),
+                        z + dz * (spread + 0.12),
+                    ]
+                )
         view = {
             name: a[name]
             for name in (

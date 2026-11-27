@@ -1,6 +1,6 @@
 # Survivor Arena
 
-A one- or two-player cooperative FPS combat mod set in an SWG Tatooine cantina. Fight waves of Tusken raiders with a lightsaber and a blaster. Raiders carry gaderffii and telegraph their attacks. Clear a wave to recover health and bring downed teammates back. If the party falls, either player can start a fresh run. The server owns movement, projectile and saber hits, enemy AI, wave progression and score.
+A one- or two-player cooperative FPS combat mod set in an SWG Tatooine cantina. Fight waves of Tusken raiders with a lightsaber and a blaster. A red-bladed duelist leads the raiders. Watch the windup, guard as the blade arrives and attack during the opening. Clear a wave to recover health and bring downed teammates back. If the party falls, either player can start a fresh run. The server owns movement, projectile and saber hits, enemy AI, wave progression and score.
 
 The server runs compiled combat and movement routines from Jedi Outcast 1.04. The client renders locally owned SWG assets. The mod includes the selected JK2 gameplay functions, a survivor simulation, an independent SpacetimeDB adapter and a data-only client pack. [Source map and licenses](NOTICE.md)
 
@@ -20,8 +20,8 @@ For two computers, use `-Seats 1` on the host. Give player 2 only their own `pla
 | --- | --- |
 | WASD, mouse | Run and aim |
 | V | Switch between first person and the chase camera |
-| Left mouse | Swing a saber or fire the blaster. Hold for repeated attacks. |
-| Right mouse with saber | Raise a timed guard against a frontal attack |
+| Left mouse | Swing a saber or fire the blaster. Hold attack and change movement direction to steer follow-up cuts. Neutral follow-ups reverse across the body. |
+| Right mouse with saber | Guard against a frontal attack. Blocking in the first 200 ms breaks the attacker’s swing. Click attack immediately for a riposte, holding W to lunge forward. |
 | Right mouse with blaster | Start charging. Left mouse fires the charged bolt. |
 | X, Space | Switch weapon, jump |
 | R | Restart after party defeat |

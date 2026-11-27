@@ -11,6 +11,8 @@ from pathlib import Path
 from urllib.error import HTTPError
 from engine.arena import (
     Kernel,
+    controls,
+    blade_contact,
     actor,
     fresh,
     melee,
@@ -64,6 +66,49 @@ def rules(kernel):
     s["enemies"] = [e]
     s["bolts"] = [dict(pos=[0, 1.4, 0.5], dir=[0, 0, 1], damage=14, life=3)]
     assert projectiles(s) and e["health"] == 54
+    duel = fresh()
+    spawn_wave(duel)
+    assert duel["enemies"][0]["style"] == 0
+    attacker = actor(3, 0, 1, 0)
+    attacker.update(yaw=math.pi, clip="overhead", age=4, duration=10)
+    crossed = actor(1, 0, 0, 0)
+    crossed.update(clip="overhead", age=4, duration=10)
+    melee(crossed, [attacker], 9)
+    assert (crossed["clip"], attacker["clip"]) == ("stagger", "stagger")
+    assert crossed["health"] == attacker["health"] == 100 and attacker["clash"][0] == 9
+    assert blade_contact(((0, 0, 0), (1, 0, 0)), ((0.5, 1, -1), (0.5, 1, 1))) is None
+    attacker.update(clip="overhead", age=4, duration=10, landed=[])
+    defender = actor(1, 0, 0, 0)
+    defender.update(clip="guard", age=2, duration=10)
+    melee(attacker, [defender], 10)
+    assert attacker["clip"] == "stagger" and defender["health"] == 100
+    assert defender["riposte_until"] == 17
+    duel["clock"] = 11
+    seat = dict(
+        slot=1,
+        epoch=0,
+        inputs=[dict(forward=1, side=0, turn=0, look=0, pitch=0, button="attack")],
+    )
+    controls(duel, defender, seat, k)
+    assert (
+        defender["clip"] == "up-right"
+        and defender["duration"] == 6
+        and defender["vz"] > 6
+    )
+    defender.update(age=4)
+    melee(defender, [attacker], 12)
+    assert attacker["health"] == 56
+    defender.update(age=5)
+    seat["inputs"][0]["forward"] = 0
+    controls(duel, defender, seat, k)
+    assert defender["clip"] == "down-left" and defender["duration"] == 8
+    attacker.update(clip="overhead", duration=10, age=4, landed=[], x=0, z=1)
+    defender.update(clip="guard", age=1, yaw=math.pi, x=0, z=0)
+    melee(attacker, [defender], 14)
+    assert defender["health"] < 100
+    print(
+        "PASS duelist spawn, frontal parry, forward riposte, return cut, rear guard exposure"
+    )
     p.update(health=0, clip="down")
     s["players"] = {"1": p}
     s, _ = step(s, [dict(slot=1, epoch=2, seq=0, inputs=[])], k)
@@ -193,7 +238,7 @@ def live(endpoint, wasm, kernel):
                 peer = next((r for r in rows if r["slot"] == 2), None)
                 if peer:
                     assert not peer["mine"] and peer["epoch"] == 0
-                foes = [r for r in rows if r["slot"] >= 3]
+                foes = [r for r in rows if r["slot"] >= 3 and r["health"]]
                 if "Wave 2 " in me["caption"]:
                     assert "Score 300" in me["caption"]
                     assert "Wave 2 " in next(
