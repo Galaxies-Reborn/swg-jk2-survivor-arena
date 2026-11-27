@@ -11,6 +11,13 @@ from zipfile import ZipFile
 
 # These are action identifiers from the JK2 multiplayer fast saber style.
 ACTIONS = {
+    "recover-cut-right": "BOTH_R1__R_S1",
+    "recover-cut-left": "BOTH_R1__L_S1",
+    "recover-up-right": "BOTH_R1_TR_S1",
+    "recover-up-left": "BOTH_R1_TL_S1",
+    "recover-down-right": "BOTH_R1_BR_S1",
+    "recover-down-left": "BOTH_R1_BL_S1",
+    "recover-overhead": "BOTH_R1_B__S1",
     "blocked-left": "BOTH_B1__L___",
     "blocked-right": "BOTH_B1__R___",
     "blocked-top": "BOTH_B1_T____",

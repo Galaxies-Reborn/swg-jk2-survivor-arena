@@ -14,6 +14,7 @@ from engine.arena import (
     JUMP_TICKS,
     JUMP_PREP,
     JUMP_FLIGHT,
+    RECOVERY_TICKS,
     Kernel,
     controls,
     blade,
@@ -198,6 +199,22 @@ def rules(kernel):
                 assert jumper["clip"] == clip, (tick, jumper)
         assert jumper["y"] == 0 and jumper["clip"] in ("walk", "idle")
     print("PASS standing, forward, running and backward jump clips through landing")
+    for cut, duration in RECOVERY_TICKS.items():
+        match = fresh()
+        match.update(wait=100)
+        fighter = actor(1, 0, 0, 0)
+        fighter.update(clip=cut, age=10, duration=10)
+        match["players"]["1"] = fighter
+        seat = dict(slot=1, epoch=0, inputs=[])
+        for age in range(duration + 1):
+            match, frame = step(match, [seat], k)
+            pose = frame["actors"][0]
+            if age == duration:
+                assert pose["clip"] == "idle"
+            else:
+                assert pose["clip"] == "recover-" + cut and pose["elapsed_ms"] == age * 50
+                assert fighter["duration"] == 0 and blade(fighter, 0.5) is None
+    print("PASS seven directional saber recoveries finish without extending the hit window")
     for action_tick in (0, JUMP_PREP + JUMP_FLIGHT - 3):
         jumper = actor(1, -0.55, 0, 0)
         state = fresh()

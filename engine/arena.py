@@ -8,6 +8,11 @@ DT = 0.05
 JUMP_PREP = 4
 JUMP_FLIGHT = 15
 JUMP_TICKS = 36  # Includes crouch, flight, impact and the return to stance.
+# Authored fast-style return lengths, rounded up to the next 50 ms snapshot.
+RECOVERY_TICKS = {
+    "cut-right": 8, "cut-left": 5, "up-right": 5, "up-left": 4,
+    "down-right": 4, "down-left": 5, "overhead": 3,
+}
 SPAWN_RADIUS = 2.8
 CUTS = (
     "overhead",
@@ -184,6 +189,7 @@ def actor(slot, x, z, style):
 
 
 def start(a, clip, ticks, now):
+    a.pop("recovery_pose", None)
     a.pop("rebound_pose", None)
     a.pop("parry_pose", None)
     a.pop("ready_origin", None)
@@ -202,6 +208,13 @@ def start(a, clip, ticks, now):
         ):
             a.pop(field, None)
     a.update(clip=clip, duration=ticks, age=0, serial=now, landed=[])
+
+
+def finish(a, now):
+    cut = a["clip"]
+    start(a, "idle", 0, now)
+    if cut in RECOVERY_TICKS and a["style"] == 0:
+        a["recovery_pose"] = ["recover-" + cut, now, RECOVERY_TICKS[cut]]
 
 
 def fresh():
@@ -404,7 +417,7 @@ def controls(s, p, seat, k):
     if chained or (counter and p["clip"] == "guard" and "attack" in taps):
         p["duration"] = 0
     if p["duration"] and p["age"] >= p["duration"]:
-        start(p, "idle", 0, now)
+        finish(p, now)
     if p["duration"]:
         for button in taps:
             if button in ("switch", "guard") or (
@@ -739,7 +752,7 @@ def pursue(s, e, players, nav=None):
             e["guard_ready"] = now + 28
             return
     if e["duration"] and e["age"] >= e["duration"]:
-        start(e, "idle", 0, now)
+        finish(e, now)
     if e["duration"]:
         if (
             e["style"] == 2
@@ -879,6 +892,15 @@ def step(state, seats, k):
             * 50,
             duration_ms=a["duration"] * 50,
         )
+        if a["clip"] in ("walk", "idle") and "recovery_pose" in a:
+            clip, tick, duration = a["recovery_pose"]
+            elapsed = s["clock"] - tick
+            if 0 <= elapsed < duration:
+                view.update(
+                    clip=clip, serial=tick, elapsed_ms=elapsed * 50, duration_ms=duration * 50
+                )
+            else:
+                a.pop("recovery_pose")
         if a["clip"] == "guard" and "parry_pose" in a:
             tick, clip, duration = a["parry_pose"]
             view.update(
