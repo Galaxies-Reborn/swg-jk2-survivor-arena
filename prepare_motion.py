@@ -11,6 +11,9 @@ from zipfile import ZipFile
 
 # These are action identifiers from the JK2 multiplayer fast saber style.
 ACTIONS = {
+    "parry-top": "BOTH_K1_S1_T_",
+    "parry-left": "BOTH_K1_S1_TL",
+    "parry-right": "BOTH_K1_S1_TR",
     "cut-right": "BOTH_A1__L__R",
     "cut-left": "BOTH_A1__R__L",
     "up-right": "BOTH_A1_BL_TR",

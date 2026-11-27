@@ -184,6 +184,7 @@ def actor(slot, x, z, style):
 
 
 def start(a, clip, ticks, now):
+    a.pop("parry_pose", None)
     a.pop("ready_origin", None)
     a.pop("steer_until", None)
     if clip in ("stagger", "down"):
@@ -619,6 +620,17 @@ def melee(p, enemies, now, nav=None):
             if e["clip"] == "guard" and faces(e, p):
                 e["contact_kind"] = "guard"
                 if e["age"] <= 4:
+                    # A timed block turns the defender's blade into the incoming
+                    # cut. Its visual recovery can be interrupted by a riposte.
+                    _, x, _, z = e["clash"]
+                    lateral = (x - e["x"]) * math.cos(e["yaw"]) - (
+                        z - e["z"]
+                    ) * math.sin(e["yaw"])
+                    side = "top"
+                    if abs(lateral) >= 0.10:
+                        side = "left" if lateral > 0 else "right"
+                    remaining = max(1, e["duration"] - e["age"])
+                    e["parry_pose"] = [now, "parry-" + side, remaining]
                     start(p, "stagger", 7, now)
                     p["follow_until"] = -1
                     e["riposte_until"] = now + 7
@@ -850,5 +862,13 @@ def step(state, seats, k):
             * 50,
             duration_ms=a["duration"] * 50,
         )
+        if a["clip"] == "guard" and "parry_pose" in a:
+            tick, clip, duration = a["parry_pose"]
+            view.update(
+                clip=clip,
+                serial=tick,
+                elapsed_ms=min(s["clock"] - tick, duration) * 50,
+                duration_ms=duration * 50,
+            )
         actors.append(view)
     return s, dict(actors=actors, caption=caption, trails=trails)

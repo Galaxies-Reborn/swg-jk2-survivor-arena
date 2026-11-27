@@ -271,6 +271,18 @@ def rules(kernel):
     assert attacker["clip"] == "stagger" and defender["health"] == 100
     assert defender["contact_kind"] == "guard" and len(contact_traces(defender, 10)) == 6
     assert defender["riposte_until"] == 17
+    for offset, clip in ((-0.25, "parry-right"), (0, "parry-top"), (0.25, "parry-left")):
+        foe = actor(3, offset, 1, 0)
+        foe.update(yaw=math.pi, clip="overhead", age=4, duration=10)
+        guard = actor(1, 0, 0, 0)
+        guard.update(clip="guard", age=2, duration=10)
+        melee(foe, [guard], 10)
+        match = fresh()
+        match.update(clock=10, players={"1": guard})
+        _, frame = step(match, [dict(slot=1, epoch=0, inputs=[])], k)
+        pose = frame["actors"][0]
+        assert (pose["clip"], pose["serial"], pose["elapsed_ms"]) == (clip, 10, 50)
+        assert pose["health"] == 100 and guard["clip"] == "guard"
     duel["clock"] = 11
     seat = dict(
         slot=1,
@@ -280,6 +292,7 @@ def rules(kernel):
     controls(duel, defender, seat, k)
     assert (
         defender["clip"] == "up-right"
+        and "parry_pose" not in defender
         and defender["duration"] == 6
         and defender["vz"] > 6
     )
