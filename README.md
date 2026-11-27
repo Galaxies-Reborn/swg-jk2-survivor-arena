@@ -6,7 +6,7 @@ The server runs compiled combat and movement routines from Jedi Outcast 1.04. Th
 
 ## Play on Windows
 
-Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera and view_swings support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
+Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, sounds and view_swings support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
 
 ```powershell
 ./Start-Arena.ps1 -Standalone '<path to spacetimedb-standalone.exe>' -ClientRoot '<game client root>'
@@ -19,7 +19,7 @@ For two computers, use `-Seats 1` on the host. Give player 2 only their own `pla
 | Control | Action |
 | --- | --- |
 | WASD, mouse | Run and aim |
-| V | Switch between first person and the chase camera |
+| V | Switch between the initial chase view and first person |
 | Left mouse | Swing a saber or fire the blaster. Hold attack and change movement direction to steer follow-up cuts. Neutral follow-ups reverse across the body. |
 | Right mouse with saber | Guard against a frontal attack. Blocking in the first 200 ms breaks the attacker’s swing. Click attack immediately for a riposte, holding W to lunge forward. |
 | Right mouse with blaster | Start charging. Left mouse fires the charged bolt. |
@@ -46,6 +46,8 @@ python verify.py --kernel build/Release/jk2_arena.dll --wasm target/wasm32-unkno
 The verifier provisions a fresh database and exercises two players, an outsider, worker restart, wave completion, team defeat, restart and lease expiry. For manual operations use `python server.py provision --help` and `python server.py serve --help`. Linux builds use the shared library produced by CMake in place of the Windows DLL.
 
 ## Integration
+
+Weapon swings, impacts, clashes and blaster shots use WAV samples in the local SWG content pack. The standalone Windows client uses the same ABI 10 swg_juce_audio.dll that ships beside the standard client executable.
 
 The client discovers `mods/swg-jk2-survivor-arena/action-pack.json`. Schema 2 adds first-person aim, per-style SWG appearances, multiple visible actors, short beam traces and an authoritative status line. Each view_swings entry names a clip and specifies windup and follow-through orientations in degrees (yaw, pitch, roll). The client interpolates these poses for the first-person weapon. A private seat profile supplies the endpoint and credential. `enter` opens an epoch, `input` accepts sequenced controls and `leave` closes it. The caller-specific `action_scene` supplies poses and presentation. Only the worker reads pending input and the recoverable checkpoint or submits a simulation frame. SpacetimeDB atomically fences stale commits, acknowledges consumed input and expires inactive seats independently of the worker.
 

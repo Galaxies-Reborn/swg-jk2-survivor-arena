@@ -54,6 +54,9 @@ class Navigation:
         cell, ground = actor.get("cell"), actor.get("ground", 0.0)
         moved = []
         for axis, delta in (("x", dx), ("z", dz)):
+            if delta == 0 and cell is not None:
+                moved.append(True)
+                continue
             x = actor["x"] + (delta if axis == "x" else 0)
             z = actor["z"] + (delta if axis == "z" else 0)
             spot = self.locate(x, z, cell, ground)

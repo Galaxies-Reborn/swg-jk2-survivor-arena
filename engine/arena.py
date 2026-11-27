@@ -65,31 +65,43 @@ class Kernel:
         self.lib.bryar_damage.argtypes = [ctypes.c_int] * 2
 
     def move(self, p, forward, side):
+        if not (forward or side or p["vx"] or p["vz"]) and (
+            not self.navigation or p.get("cell") is not None
+        ):
+            return
         dx = forward * math.sin(p["yaw"]) - side * math.cos(p["yaw"])
         dz = forward * math.cos(p["yaw"]) + side * math.sin(p["yaw"])
         norm = max(1.0, math.hypot(dx, dz))
         v = VEC(p["vx"], 0, p["vz"])
-        if p["y"] <= 0:
-            friction = max(0.0, 1.0 - 6.0 * DT)
-            v[0] *= friction
-            v[2] *= friction
-        self.lib.PM_Accelerate(
-            v,
-            VEC(dx / norm, 0, dz / norm),
-            5.8 if (side or forward) else 0.0,
-            8.0 if p["y"] <= 0 else 1.0,
-            DT,
-        )
-        if self.navigation:
-            moved = self.navigation.slide(p, v[0] * DT, v[2] * DT)
-            for index, clear in zip((0, 2), moved):
-                if not clear:
-                    normal = VEC(0, 0, 0)
-                    normal[index] = -math.copysign(1, v[index])
-                    self.lib.PM_ClipVelocity(v, normal, v, 1.001)
-        else:
-            p["x"] += v[0] * DT
-            p["z"] += v[2] * DT
+        # JK2 PM_Friction uses a minimum control speed, so releasing a key
+        # brakes to a stop. Subdivide the realm tick for stable turns/contacts.
+        grounded = p["y"] <= 0
+        step = DT / 5
+        wish = VEC(dx / norm, 0, dz / norm)
+        for _ in range(5):
+            speed = math.hypot(v[0], v[2])
+            if grounded and speed:
+                stop_speed = 5.8 * (100 / 250)
+                friction = max(0.0, speed - 6 * max(speed, stop_speed) * step) / speed
+                v[0] *= friction
+                v[2] *= friction
+            self.lib.PM_Accelerate(
+                v,
+                wish,
+                5.8 if (side or forward) else 0.0,
+                10.0 if grounded else 1.0,
+                step,
+            )
+            if self.navigation:
+                clear = self.navigation.slide(p, v[0] * step, v[2] * step)
+                for index, allowed in zip((0, 2), clear):
+                    if not allowed:
+                        normal = VEC(0, 0, 0)
+                        normal[index] = -math.copysign(1, v[index])
+                        self.lib.PM_ClipVelocity(v, normal, v, 1.001)
+            else:
+                p["x"] += v[0] * step
+                p["z"] += v[2] * step
         p["vx"], p["vz"] = v[0], v[2]
 
 
@@ -657,6 +669,8 @@ def step(state, seats, k):
             )
         }
         view["y"] += a.get("ground", 0.0)
+        if a["style"] == 2 and a["clip"] == "overhead":
+            view["clip"] = "staff-strike"
         view.update(
             elapsed_ms=min(a["age"], a["duration"]) * 50, duration_ms=a["duration"] * 50
         )

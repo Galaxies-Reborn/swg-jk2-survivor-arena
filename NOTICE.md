@@ -12,6 +12,8 @@ Changes made November 26, 2026, in `engine/jk2.c`:
 | [bg_saber.c](https://github.com/TriForceX/JK2SourceCode/blob/65ac6562d83e3080f392d75c585263b45c044f03/jk2-1.04-src/CODE-mp/game/bg_saber.c) | Adapted the grounded directional selection from PM_SaberAttackForMovement. The arena supplies rear-target detection, swing volumes, timing and animation keys. |
 | [g_weapon.c](https://github.com/TriForceX/JK2SourceCode/blob/65ac6562d83e3080f392d75c585263b45c044f03/jk2-1.04-src/CODE-mp/game/g_weapon.c) | Adapted the capped Bryar charge damage computation in WP_FireBryarPistol. The arena supplies the projectile path, range, hit detection and SWG presentation. |
 
+The worker also adapts the minimum control-speed ground friction and ground/air acceleration settings from the pinned bg_pmove.c. It integrates movement in five 10 ms steps per realm frame.
+
 The published tree contains source and asset path names. Players obtain art, skeletal animation, weapons and scenery from their own SWG installation. Neither title's retail material is licensed by this repository.
 
 ## Distribution boundary

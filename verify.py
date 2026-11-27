@@ -30,6 +30,15 @@ def rules(kernel):
     v = actor(1, 0, 0, 0)
     k.move(v, 1, 1)
     assert 0 < math.hypot(v["vx"], v["vz"]) <= 3.6 and abs(v["vx"] + v["vz"]) < 0.001
+    for _ in range(20):
+        k.move(v, 1, 0)
+    assert 5.7 < v["vz"] <= 5.81
+    for _ in range(10):
+        k.move(v, 0, 0)
+    assert v["vx"] == v["vz"] == 0
+    k.move(v, 0, 1)
+    assert v["vx"] < 0 and v["vz"] == 0
+    print("PASS ground acceleration, finite braking and strafe response")
     from engine.navigation import Navigation
 
     nav = Navigation(ROOT / ".local/navigation.json")
@@ -196,6 +205,17 @@ def live(endpoint, wasm, kernel):
 
         proc = launch()
         try:
+            # Wait for a published simulation frame before timing the jump.
+            ready = time.monotonic() + 8
+            while not any(
+                r["mine"] and r["caption"].startswith("Wave ") for r in a.rows()
+            ):
+                assert proc.poll() is None and time.monotonic() < ready, (
+                    "worker startup"
+                )
+                a.send()
+                b.send()
+                time.sleep(0.05)
             b.send("jump", pitch=500)
             aim_time = time.monotonic() + 2
             while time.monotonic() < aim_time:
