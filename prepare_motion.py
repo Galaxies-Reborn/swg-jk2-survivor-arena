@@ -49,7 +49,7 @@ def normalized(v):
     return [x / length for x in v]
 
 
-def weapon_axis(model, saber):
+def weapon_axes(model, saber):
     # LOD 0 rigid hand attachment triangle in the humanoid bind pose.
     ident, version, _, _, _, _, _, lod, count, _, end = struct.unpack_from(
         "<4si64s64s7i", model
@@ -91,15 +91,17 @@ def weapon_axis(model, saber):
         name, *values = struct.unpack_from("<64s12f", saber, tag_off + 112 * t)
         if name.split(b"\0")[0] == b"tag_flash":
             # MD3 tag X is the emitter direction in weapon coordinates.
-            x, y, z = values[3:6]
-            return bone, normalized(
-                [x * short[i] + y * long[i] + z * normal[i] for i in range(3)]
-            )
+
+            def in_hand(v):
+                x, y, z = v
+                return normalized([x * short[i] + y * long[i] + z * normal[i] for i in range(3)])
+
+            return bone, in_hand(values[3:6]), in_hand(values[6:9])
     raise ValueError("Saber emitter tag missing")
 
 
 def decode(data, cfg, model, saber):
-    bolt, axis = weapon_axis(model, saber)
+    bolt, blade_axis, grip_side = weapon_axes(model, saber)
     header = struct.Struct("<4si64sf6i")
     ident, version, _, _, frames, indices, bones, pool, _, end = header.unpack_from(
         data
@@ -190,9 +192,13 @@ def decode(data, cfg, model, saber):
         if not 0 <= bolt < bones:
             raise ValueError("Invalid hand bolt bone")
         orientation = skin(bolt)
-        x, y, z = normalized(
-            [sum(row[j] * axis[j] for j in range(3)) for row in orientation]
-        )
+
+        def rotate_axis(axis):
+            x, y, z = normalized(
+                [sum(row[j] * axis[j] for j in range(3)) for row in orientation]
+            )
+            return [round(v, 6) for v in (x, z, -y)]
+
         return dict(
             shoulders=unit("lhumerus", "rhumerus"),
             arms=[
@@ -201,7 +207,8 @@ def decode(data, cfg, model, saber):
                 unit("lradius", "lhumerus"),
                 unit("lhand", "lradius"),
             ],
-            blade=[round(v, 6) for v in (x, z, -y)],
+            blade=rotate_axis(blade_axis),
+            grip_side=rotate_axis(grip_side),
             hand=[round(x / 40, 6) for x in diff("rhand", "thoracic")],
         )
 
@@ -237,6 +244,11 @@ def decode(data, cfg, model, saber):
             entry = len(windup) - 1
             frames_out = windup[:-1] + frames_out
         clips[clip] = dict(fps=fps, frames=frames_out, entry=entry)
+    # All moves start from the same calibration so a return keeps the palm
+    # orientation of the preceding move even when it skips its windup.
+    guard = clips["cut-left"]["frames"][0]
+    for track in clips.values():
+        track["guard_axes"] = [guard["blade"], guard["grip_side"]]
     return clips
 
 
