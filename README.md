@@ -6,7 +6,7 @@ The server runs compiled combat and movement routines from Jedi Outcast 1.04. Th
 
 ## Play on Windows
 
-Use a Bevy client with action-pack schema 2 and first-person view_swings support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
+Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera and view_swings support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
 
 ```powershell
 ./Start-Arena.ps1 -Standalone '<path to spacetimedb-standalone.exe>' -ClientRoot '<game client root>'
@@ -14,11 +14,12 @@ Use a Bevy client with action-pack schema 2 and first-person view_swings support
 
 The launcher builds the GPL combat library and the separate realm WASM, starts a dedicated loopback host on port 38431, provisions two player identities on first use, installs the selected pack and profiles, and runs the simulation. Start the compatible client and choose **Custom â†’ Survivor Arena Â· Player 1**. A second client can choose **Player 2**. Escape leaves the arena. The host persists the match in `.local/arena`. Reuse the same state directory and port to resume. Ctrl+C ends the hosting session.
 
-For two computers, use `-Seats 1` on the host. Give player 2 only their own `player-2.json` file privately. On their machine, run `python install.py "<client root>" "<path to player-2.json>"` and forward local port 38431 to the host's loopback port over an authenticated tunnel. Each machine prepares its own SWG content. The operator and worker profiles and host signing key stay on the server. The host can run headless by omitting `-ClientRoot`.
+For two computers, use `-Seats 1` on the host. Give player 2 only their own `player-2.json` file privately. On their machine, run `python install.py "<client root>" "<path to player-2.json>"` and forward local port 38431 to the host's loopback port over an authenticated tunnel. Each machine prepares its own SWG content. The operator and worker profiles and host signing key stay on the server. The host reads its own walkable floors and passable doorways from `.local/navigation.json`. The launcher generates this file from the host’s SWG installation using the client checkout on first run. For a headless host, supply the generated file with `-Navigation`. Keep this retail-derived file local.
 
 | Control | Action |
 | --- | --- |
-| WASD, mouse | Move and aim in first person |
+| WASD, mouse | Run and aim |
+| V | Switch between first person and the chase camera |
 | Left mouse | Swing a saber or fire the blaster. Hold for repeated attacks. |
 | Right mouse with saber | Raise a timed guard against a frontal attack |
 | Right mouse with blaster | Start charging. Left mouse fires the charged bolt. |

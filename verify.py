@@ -28,10 +28,24 @@ def rules(kernel):
     v = actor(1, 0, 0, 0)
     k.move(v, 1, 1)
     assert 0 < math.hypot(v["vx"], v["vz"]) <= 3.6 and abs(v["vx"] + v["vz"]) < 0.001
-    v["x"] = 3.0
-    v["vx"] = 6.0
-    k.move(v, 0, -1)
-    assert v["x"] == 3 and v["vx"] < 0.01
+    from engine.navigation import Navigation
+
+    nav = Navigation(ROOT / ".local/navigation.json")
+    k.navigation = nav
+    v = actor(1, -0.55, 0.0, 0)
+    for _ in range(30):
+        k.move(v, 1, 0)
+    assert v["cell"] == 3 and v["z"] > 4
+    for _ in range(150):
+        k.move(v, -1, 0)
+    assert v["cell"] == 8 and -6.5 < v["z"] < -5.5
+    print("PASS spawn to main room, return through portal, stop at solid wall")
+    # Check the upstream clip response against a perpendicular wall.
+    from engine.arena import VEC
+
+    vel = VEC(6.0, 0.0, 0.0)
+    k.lib.PM_ClipVelocity(vel, VEC(-1.0, 0.0, 0.0), vel, 1.001)
+    assert abs(vel[0]) < 0.01
     assert k.lib.bryar_damage(14, 10) == 119 and k.lib.bryar_damage(14, 0) == 14
     assert sorted(
         set(k.lib.saber_cut(f, s, 1) for f in (-1, 0, 1) for s in (-1, 0, 1))
@@ -147,6 +161,26 @@ def live(endpoint, wasm, kernel):
             assert peer and peer["y"] > 0.05 and peer["pitch"] < -0.05
             b.send(pitch=-500)
             print("PASS peer-visible first-person pitch and jump", flush=True)
+            deadline = time.monotonic() + 4
+            while time.monotonic() < deadline:
+                b.send(forward=1)
+                a.send()
+                peer = next(r for r in a.rows() if r["slot"] == 2)
+                if peer["z"] > 4.0:
+                    break
+                time.sleep(0.05)
+            assert peer["z"] > 4.0
+            while time.monotonic() < deadline:
+                b.send(forward=-1)
+                a.send()
+                if next(r for r in a.rows() if r["slot"] == 2)["z"] < 1.0:
+                    break
+                time.sleep(0.05)
+            b.send()
+            print(
+                "PASS second identity observed traversing the main-room doorway",
+                flush=True,
+            )
             start = time.monotonic()
             switched = False
             reached = False

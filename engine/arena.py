@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 
 DT = 0.05
-EDGE = 3.0
+SPAWN_RADIUS = 2.8
 CUTS = (
     "overhead",
     "down-right",
@@ -30,7 +30,8 @@ VEC = ctypes.c_float * 3
 
 
 class Kernel:
-    def __init__(self, path):
+    def __init__(self, path, navigation=None):
+        self.navigation = navigation
         self.lib = ctypes.CDLL(str(Path(path).resolve()))
         vec = ctypes.POINTER(ctypes.c_float)
         self.lib.PM_Accelerate.argtypes = [
@@ -58,17 +59,20 @@ class Kernel:
         self.lib.PM_Accelerate(
             v,
             VEC(dx / norm, 0, dz / norm),
-            3.6 if (side or forward) else 0.0,
+            5.8 if (side or forward) else 0.0,
             8.0 if p["y"] <= 0 else 1.0,
             DT,
         )
-        for axis, index in [("x", 0), ("z", 2)]:
-            raw = p[axis] + v[index] * DT
-            p[axis] = max(-EDGE, min(EDGE, raw))
-            if raw != p[axis]:
-                normal = VEC(0, 0, 0)
-                normal[index] = -math.copysign(1, raw)
-                self.lib.PM_ClipVelocity(v, normal, v, 1.001)
+        if self.navigation:
+            moved = self.navigation.slide(p, v[0] * DT, v[2] * DT)
+            for index, clear in zip((0, 2), moved):
+                if not clear:
+                    normal = VEC(0, 0, 0)
+                    normal[index] = -math.copysign(1, v[index])
+                    self.lib.PM_ClipVelocity(v, normal, v, 1.001)
+        else:
+            p["x"] += v[0] * DT
+            p["z"] += v[2] * DT
         p["vx"], p["vz"] = v[0], v[2]
 
 
@@ -117,15 +121,29 @@ def fresh():
     )
 
 
-def spawn_wave(s):
+def spawn_wave(s, nav=None):
     s["wave"] += 1
     count = min(2 + s["wave"], 12)
     s["enemies"] = []
     for i in range(count):
         angle = (i / count) * math.tau
         e = actor(
-            3 + i, EDGE * 0.94 * math.sin(angle), EDGE * 0.94 * math.cos(angle), 2
+            3 + i, SPAWN_RADIUS * math.sin(angle), SPAWN_RADIUS * math.cos(angle), 2
         )
+        if nav:
+            players = list(s["players"].values())
+            anchor = players[i % len(players)] if players else dict(x=0.0, z=0.0)
+            for radius in (5.5, 4.0, 2.8, 1.6, 0.8, 0.0):
+                x, z = (
+                    anchor["x"] + radius * math.sin(angle),
+                    anchor["z"] + radius * math.cos(angle),
+                )
+                surface = nav.locate(
+                    x, z, anchor.get("cell"), anchor.get("ground", 0.0)
+                )
+                if surface:
+                    e.update(x=x, z=z, cell=surface[0], ground=surface[1])
+                    break
         e["health"] = min(100, 20 + 5 * s["wave"])
         s["enemies"].append(e)
     s["phase"] = "fighting"
@@ -146,8 +164,10 @@ def shoot(s, p, k, charge):
     direction = [math.sin(p["yaw"]) * cp, math.sin(p["pitch"]), math.cos(p["yaw"]) * cp]
     s["bolts"].append(
         dict(
-            pos=[p["x"], p["y"] + 1.42, p["z"]],
+            pos=[p["x"], p["y"] + p.get("ground", 0.0) + 1.42, p["z"]],
             dir=direction,
+            cell=p.get("cell"),
+            ground=p.get("ground", 0.0),
             damage=k.lib.bryar_damage(14, charge),
             life=15,
         )
@@ -186,7 +206,11 @@ def controls(s, p, seat, k):
         start(p, "idle", 0, now)
     if p["duration"]:
         for button in taps:
-            if button in ("switch", "guard", "jump"):
+            if button in ("switch", "guard", "jump") or (
+                button == "attack"
+                and p["duration"] - p["age"] <= 3
+                and not p.get("queued")
+            ):
                 p["queued"] = button
     else:
         queued = p.pop("queued", None)
@@ -230,7 +254,7 @@ def controls(s, p, seat, k):
         p["energy"] = min(100, p["energy"] + 1)
 
 
-def melee(p, enemies, now):
+def melee(p, enemies, now, nav=None):
     if p["clip"] not in CUTS or not 2 <= p["age"] <= 6:
         return
     start_yaw, end_yaw, top, bottom = SWEEPS[CUTS.index(p["clip"])]
@@ -248,11 +272,13 @@ def melee(p, enemies, now):
                 and math.hypot(dx - along * math.sin(yaw), dz - along * math.cos(yaw))
                 <= 0.45
             ):
+                if nav and not nav.clear(p, e):
+                    continue
                 hurt(e, 32, now)
                 p["landed"].append(e["slot"])
 
 
-def projectiles(s):
+def projectiles(s, nav=None):
     trails = []
     surviving = []
     for b in s["bolts"]:
@@ -262,16 +288,28 @@ def projectiles(s):
         end = [a + d * length for a, d in zip(origin, direction)]
         nearest = None
         best = length + 1.0
+        wall = length + 1.0
+        if nav:
+            for j in range(1, 18):
+                t = length * j / 17
+                x, y, z = (a + d * t for a, d in zip(origin, direction))
+                surface = nav.locate(x, z, b.get("cell"), b.get("ground", 0.0))
+                if not surface or y < surface[1]:
+                    wall = t
+                    end = [x, y, z]
+                    break
+                b["cell"], b["ground"] = surface
         for e in s["enemies"]:
             if not e["health"]:
                 continue
             # A vertical body capsule. Find first contact along the bolt's swept segment.
             for j in range(17):
                 t = length * j / 16
-                if t >= best:
+                if t >= min(best, wall):
                     break
                 x, y, z = [a + d * t for a, d in zip(origin, direction)]
-                dy = y - max(0.32, min(1.45, y))
+                local_y = y - e.get("ground", 0.0)
+                dy = local_y - max(0.32, min(1.45, local_y))
                 if (x - e["x"]) ** 2 + (z - e["z"]) ** 2 + dy**2 <= 0.38**2:
                     nearest, best = e, t
                     break
@@ -279,8 +317,8 @@ def projectiles(s):
             end = [a + d * best for a, d in zip(origin, direction)]
             hurt(nearest, b["damage"], s["clock"])
         elif (
-            max(abs(end[0]), abs(end[2])) <= EDGE + 0.25
-            and 0 < end[1] < 3.8
+            wall > length
+            and b.get("ground", 0.0) < end[1] < b.get("ground", 0.0) + 3.8
             and b["life"] > 1
         ):
             b.update(pos=end, life=b["life"] - 1)
@@ -290,7 +328,7 @@ def projectiles(s):
     return trails
 
 
-def pursue(s, e, players):
+def pursue(s, e, players, nav=None):
     if not e["health"] or not players:
         return
     now = s["clock"]
@@ -302,7 +340,13 @@ def pursue(s, e, players):
     if e["duration"] and e["age"] >= e["duration"]:
         start(e, "idle", 0, now)
     if e["duration"]:
-        if e["clip"] == "overhead" and e["age"] == 6 and dist < 1.25 and p["y"] < 0.8:
+        if (
+            e["clip"] == "overhead"
+            and e["age"] == 6
+            and dist < 1.25
+            and p["y"] < 0.8
+            and (not nav or nav.clear(e, p))
+        ):
             facing = -dx * math.sin(p["yaw"]) - dz * math.cos(p["yaw"])
             if p["clip"] == "guard" and facing >= 0.2 * dist:
                 start(e, "stagger", 13, now)
@@ -313,8 +357,15 @@ def pursue(s, e, players):
         start(e, "overhead", 20, now)
     else:
         speed = min(2.3, 0.68 + s["wave"] * 0.10) * DT
-        e["x"] += dx / max(0.001, dist) * speed
-        e["z"] += dz / max(0.001, dist) * speed
+        if nav:
+            wx, wz = nav.waypoint(e, p)
+            dx, dz = wx - e["x"], wz - e["z"]
+            length = max(speed, math.hypot(dx, dz))
+            nav.slide(e, dx / length * speed, dz / length * speed)
+            e["yaw"] = math.atan2(dx, dz)
+        else:
+            e["x"] += dx / max(0.001, dist) * speed
+            e["z"] += dz / max(0.001, dist) * speed
         e["clip"] = "walk"
 
 
@@ -340,15 +391,15 @@ def step(state, seats, k):
     if s["phase"] == "intermission":
         s["wait"] -= 1
         if s["wait"] <= 0:
-            spawn_wave(s)
+            spawn_wave(s, k.navigation)
     if s["phase"] == "fighting":
         before = sum(e["health"] > 0 for e in s["enemies"])
         for p in active:
             if p["health"]:
-                melee(p, s["enemies"], s["clock"])
-        trails = projectiles(s)
+                melee(p, s["enemies"], s["clock"], k.navigation)
+        trails = projectiles(s, k.navigation)
         for e in s["enemies"]:
-            pursue(s, e, [p for p in active if p["health"]])
+            pursue(s, e, [p for p in active if p["health"]], k.navigation)
         remaining = sum(e["health"] > 0 for e in s["enemies"])
         s["score"] += 100 * (before - remaining)
         if not any(p["health"] for p in active):
@@ -382,6 +433,7 @@ def step(state, seats, k):
                 "serial",
             )
         }
+        view["y"] += a.get("ground", 0.0)
         view.update(
             elapsed_ms=min(a["age"], a["duration"]) * 50, duration_ms=a["duration"] * 50
         )

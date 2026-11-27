@@ -122,9 +122,11 @@ def tick(client, kernel):
     return True
 
 
-def serve(profile, library):
+def serve(profile, library, navigation):
+    from engine.navigation import Navigation
+
     client = Client(json.loads(profile.read_bytes()))
-    kernel = Kernel(library)
+    kernel = Kernel(library, Navigation(navigation))
     deadline = time.monotonic()
     failures = 0
     while True:
@@ -158,8 +160,13 @@ if __name__ == "__main__":
     worker = commands.add_parser("serve")
     worker.add_argument("--profile", required=True, type=Path)
     worker.add_argument("--kernel", required=True, type=Path)
+    worker.add_argument(
+        "--navigation",
+        type=Path,
+        default=Path(__file__).resolve().parent / ".local/navigation.json",
+    )
     args = parser.parse_args()
     if args.command == "provision":
         provision(args.endpoint, args.wasm, args.profiles)
     else:
-        serve(args.profile, args.kernel)
+        serve(args.profile, args.kernel, args.navigation)

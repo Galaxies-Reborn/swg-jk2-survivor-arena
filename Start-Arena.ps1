@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)][string]$Standalone,
     [string]$ClientRoot,
+    [string]$Navigation,
     [ValidateSet(1,2)][int[]]$Seats = @(1,2),
     [ValidateRange(1024,65535)][int]$Port = 38431,
     [string]$StateDirectory = (Join-Path $PSScriptRoot '.local/arena')
@@ -15,6 +16,14 @@ $endpoint = "http://127.0.0.1:$Port"
 $hostProcess = $null
 Push-Location $PSScriptRoot
 try {
+    if (!$Navigation) { $Navigation = Join-Path $PSScriptRoot '.local/navigation.json' }
+    if (!(Test-Path -LiteralPath $Navigation)) {
+        if (!$ClientRoot) { throw 'Supply -Navigation from the local SWG installation, or -ClientRoot to generate it.' }
+        $retail = (Get-Content -Raw (Join-Path $ClientRoot '.local/content-packs/pre-cu.json') | ConvertFrom-Json).source_root
+        $null = New-Item -ItemType Directory -Force (Split-Path -Parent $Navigation)
+        & cargo run --locked --manifest-path (Join-Path $ClientRoot 'Cargo.toml') -p poc-client --bin action-navigation -- (Join-Path $PSScriptRoot 'action-pack.json') $retail $Navigation
+        if ($LASTEXITCODE) { throw 'Local cantina navigation extraction failed' }
+    }
     & cmake -S engine -B build
     if ($LASTEXITCODE) { throw 'CMake configuration failed' }
     & cmake --build build --config Release
@@ -55,7 +64,7 @@ try {
         }
     }
     Write-Host 'Survivor Arena is ready. Start the compatible Bevy client and choose Custom, then Survivor Arena.'
-    & python server.py serve --profile $worker --kernel $kernel.FullName
+    & python server.py serve --profile $worker --kernel $kernel.FullName --navigation $Navigation
     if ($LASTEXITCODE) { throw 'Arena worker stopped' }
 } finally {
     if ($hostProcess -and !$hostProcess.HasExited) { $hostProcess.Kill(); $hostProcess.WaitForExit() }
