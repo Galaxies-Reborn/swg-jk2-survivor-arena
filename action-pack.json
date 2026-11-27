@@ -138,6 +138,7 @@
     "sidestep-right"
   ],
   "movement_lead_m": 0.14,
+  "gait_full_speed_mps": 5.8,
   "appearances": {
     "2": "appearance/tusken_raider_m.sat"
   },
