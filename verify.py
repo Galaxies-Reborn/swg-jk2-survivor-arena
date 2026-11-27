@@ -197,6 +197,27 @@ def rules(kernel):
                 assert jumper["clip"] == clip, (tick, jumper)
         assert jumper["y"] == 0 and jumper["clip"] in ("walk", "idle")
     print("PASS standing, forward, running and backward jump clips through landing")
+    for action_tick in (0, JUMP_PREP + JUMP_FLIGHT - 3):
+        jumper = actor(1, -0.55, 0, 0)
+        state = fresh()
+        saw_cut = saw_recovery = False
+        for tick in range(JUMP_TICKS + 1):
+            buttons = (["jump"] if tick == 0 else []) + (
+                ["attack"] if tick == action_tick else []
+            )
+            inputs = [
+                dict(forward=-1, side=0, turn=0, look=0, pitch=0, button=b)
+                for b in buttons
+            ]
+            state["clock"] = tick
+            controls(state, jumper, dict(slot=1, epoch=0, inputs=inputs), k)
+            saw_cut |= jumper["clip"] in CUTS
+            if saw_cut and jumper["clip"] not in CUTS and tick < JUMP_TICKS:
+                assert jumper["clip"] == "jump-back", (tick, jumper)
+                assert jumper["age"] == tick + 1
+                saw_recovery |= jumper["y"] == 0
+        assert saw_cut and saw_recovery and jumper["clip"] == "idle"
+    print("PASS saber cut across touchdown resumes the original landing phase")
     v = actor(1, -0.55, 0.0, 0)
     for _ in range(30):
         k.move(v, 1, 0)

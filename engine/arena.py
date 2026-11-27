@@ -187,6 +187,9 @@ def start(a, clip, ticks, now):
     a.pop("ready_origin", None)
     a.pop("steer_until", None)
     if clip in ("stagger", "down"):
+        if "lift_tick" in a or clip == "down":
+            a.pop("takeoff", None)
+            a.pop("jump_clip", None)
         a.pop("lift_tick", None)
         for field in (
             "queued",
@@ -453,9 +456,16 @@ def controls(s, p, seat, k):
                 )
             if p["duration"]:
                 break
-        if not p["duration"] and p["y"] > 0 and "takeoff" in p:
-            start(p, p.get("jump_clip", "jump"), JUMP_TICKS, p["takeoff"])
-            p["age"] = now - p["takeoff"]
+        if not p["duration"] and "takeoff" in p:
+            jump_age = now - p["takeoff"]
+            if jump_age < JUMP_TICKS:
+                # An overlapping cut can finish after touchdown. Resume the
+                # remaining landing frames on the original jump timeline.
+                start(p, p.get("jump_clip", "jump"), JUMP_TICKS, p["takeoff"])
+                p["age"] = jump_age
+            else:
+                p.pop("takeoff")
+                p.pop("jump_clip", None)
         if not p["duration"]:
             p["clip"] = "walk" if math.hypot(p["vx"], p["vz"]) > 0.18 else "idle"
     p["age"] += 1
