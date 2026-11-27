@@ -50,12 +50,21 @@ QUADRANTS = dict(
 )
 
 
-def chain_age(current, following, duration):
+def reposition_ticks(current, following):
     gap = abs(QUADRANTS[current][1] - QUADRANTS[following][0])
     steps = min(gap, 8 - gap)
-    # Finish the damaging sweep. Nearby starts use the follow-through;
-    # a blade that must cross the body spends longer in recovery.
-    return min(duration, math.ceil(duration * 0.72) + (steps + 1) // 2)
+    return (steps + 1) // 2
+
+
+def attack(p, clip, ticks, now, *, counter=False, lead=0):
+    start(p, clip, ticks, now)
+    p.update(
+        age=lead,
+        last_cut=clip,
+        follow_until=now + ticks - lead + 2,
+        strike_damage=44 if counter else 32,
+        riposte_until=-1,
+    )
 
 
 VEC = ctypes.c_float * 3
@@ -244,15 +253,20 @@ def controls(s, p, seat, k):
         )
     taps = []
     cut_axes = None
+    release_axes = None
     yaw_input = pitch_input = 0
     for i in seat["inputs"]:
         p.update(forward=i["forward"], side=i["side"], turn=i["turn"], last_input=now)
+        if i["side"]:
+            p.update(strafe_axes=(i["forward"], i["side"]), strafe_tick=now)
         yaw_input += i["look"]
         pitch_input += i["pitch"]
         if i["button"]:
             taps.append(i["button"])
             if i["button"] == "attack" and cut_axes is None:
                 cut_axes = (i["forward"], i["side"])
+                if now - p.get("strafe_tick", -10) <= 2:
+                    release_axes = p["strafe_axes"]
     yaw_delta = max(-1800, min(1800, yaw_input)) / 100
     pitch_delta = max(-1800, min(1800, pitch_input)) / 100
     p["yaw"] = math.remainder(p["yaw"] - math.radians(yaw_delta), math.tau)
@@ -276,9 +290,21 @@ def controls(s, p, seat, k):
     if p["clip"] == "jump" and "attack" in taps:
         p["duration"] = 0
     current = p["clip"]
+    if current.startswith("ready-") and current[6:] in CUTS:
+        if "guard" in taps or "switch" in taps:
+            taps = [button for button in taps if button in ("guard", "switch")]
+            start(p, "idle", 0, now)
+        elif p["age"] >= p["duration"]:
+            # The blade has reached the start quadrant. Continue the committed
+            # strike even if the player released the mouse during the link.
+            attack(p, current[6:], 8, now, lead=1)
+            taps.clear()
+        else:
+            taps.clear()
+        current = p["clip"]
     if (
         current in CUTS
-        and p["age"] >= math.ceil(p["duration"] * 0.50)
+        and p["age"] >= math.ceil(p["duration"] * 0.35)
         and "attack" in taps
     ):
         if p.get("queued") in (None, "attack"):
@@ -291,12 +317,8 @@ def controls(s, p, seat, k):
             p.get("queued_cut_axes") or cut_axes or (p["forward"], p["side"])
         )
         following = p.get("follow_until", -1) >= now and p.get("last_cut") in RETURN_CUT
-        if (
-            not (forward or side)
-            and not following
-            and now - p.get("strafe_tick", -10) <= 2
-        ):
-            forward, side = p["strafe_axes"]
+        if not (forward or side) and not following and release_axes is not None:
+            forward, side = release_axes
         behind = (
             forward < 0
             and not side
@@ -317,8 +339,17 @@ def controls(s, p, seat, k):
     chained = (
         current in CUTS
         and requested is not None
-        and p["age"] >= chain_age(current, requested, p["duration"])
+        and p["age"] >= math.ceil(p["duration"] * 0.72)
+        and p.get("queued") in (None, "attack")
+        and "guard" not in taps
+        and "switch" not in taps
     )
+    if chained and (travel := reposition_ticks(current, requested)):
+        start(p, "ready-" + requested, travel + 1, now)
+        p.pop("queued", None)
+        p.pop("queued_cut_axes", None)
+        taps.clear()
+        chained = False
     counter = p.get("riposte_until", -1) >= now
     if chained or (counter and p["clip"] == "guard" and "attack" in taps):
         p["duration"] = 0
@@ -363,12 +394,17 @@ def controls(s, p, seat, k):
                     p["vz"] = 7.2 * math.cos(p["yaw"])
                     clip = "up-right" if side >= 0 else "up-left"
                 ticks = 6 if counter else 8 if following else 10
-                start(p, clip, ticks, now)
-                p.update(
-                    last_cut=clip,
-                    follow_until=now + ticks + 2,
-                    strike_damage=44 if counter else 32,
-                    riposte_until=-1,
+                lateral_speed = -p["vx"] * math.cos(p["yaw"]) + p["vz"] * math.sin(
+                    p["yaw"]
+                )
+                carrying = not following and side * lateral_speed > 0.7
+                attack(
+                    p,
+                    clip,
+                    ticks,
+                    now,
+                    counter=counter,
+                    lead=int(not counter and (chained or carrying)),
                 )
             if p["duration"]:
                 break

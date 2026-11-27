@@ -13,6 +13,7 @@ from engine.arena import (
     CUTS,
     Kernel,
     controls,
+    blade,
     blade_contact,
     actor,
     fresh,
@@ -46,6 +47,15 @@ def rules(kernel):
     swing = actor(1, 0, 0, 0)
     controls(fresh(), swing, dict(epoch=0, inputs=[tap, release]), k)
     assert swing["clip"] == CUTS[k.lib.saber_cut(0, 1, 0)] and swing["side"] == 0
+    neutral_attack = dict(release, button="attack")
+    strafe = dict(tap, button="")
+    for inputs, expected in (
+        ([strafe, release, neutral_attack], "cut-right"),
+        ([neutral_attack, strafe], "overhead"),
+    ):
+        swing = actor(1, 0, 0, 0)
+        controls(fresh(), swing, dict(epoch=0, inputs=inputs), k)
+        assert swing["clip"] == expected
     print("PASS directional swing survives same-tick strafe release")
 
     def combo(next_side):
@@ -62,14 +72,20 @@ def rules(kernel):
         frame([dict(release, button="attack")])
         assert fighter["clip"] == "cut-right" and fighter["vx"] < 0
         first = fighter["serial"]
+        preparing = []
         for tick in range(1, 13):
             frame([dict(tap, side=next_side)] if tick == 5 else [release])
-            if fighter["serial"] != first:
-                return tick, fighter["clip"]
+            if fighter["clip"].startswith("ready-"):
+                assert blade(fighter, 0.5) is None
+                preparing.append(fighter["clip"])
+                fighter = json.loads(json.dumps(fighter))
+            elif fighter["serial"] != first:
+                return tick, fighter["clip"], preparing
         raise AssertionError("Buffered cut did not start")
 
-    returning, mirrored = combo(-1)
-    rewinding, repeated = combo(1)
+    returning, mirrored, direct = combo(-1)
+    rewinding, repeated, link = combo(1)
+    assert not direct and link == ["ready-cut-right"] * 3
     assert (mirrored, repeated) == ("cut-left", "cut-right") and returning < rewinding
     print(
         "PASS braking strafe into cut and buffered opposite/same-side links",
@@ -382,6 +398,32 @@ def live(endpoint, wasm, kernel):
                 "PASS second player observed right strafe cut into left return",
                 flush=True,
             )
+            previous = peer["serial"]
+            ordered = False
+            saw_ready = False
+            end = time.monotonic() + 1.2
+            while time.monotonic() < end:
+                peer = next(r for r in b.rows() if r["slot"] == 1)
+                if (
+                    peer["serial"] == previous
+                    and peer["elapsed_ms"] >= 150
+                    and not ordered
+                ):
+                    a.send("attack", side=-1)
+                    ordered = True
+                saw_ready |= peer["clip"] == "ready-cut-left"
+                if (
+                    saw_ready
+                    and peer["clip"] == "cut-left"
+                    and peer["serial"] > previous
+                ):
+                    break
+                time.sleep(0.012)
+            else:
+                raise AssertionError(
+                    "Peer did not see the blade recover before the repeated cut"
+                )
+            print("PASS peer-visible blade recovery and repeated left cut", flush=True)
             b.leave()
             assert b.rows() == []
             assert not any(r["slot"] == 2 for r in a.rows())
