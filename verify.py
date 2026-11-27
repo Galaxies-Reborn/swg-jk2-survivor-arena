@@ -28,6 +28,18 @@ ROOT = Path(__file__).resolve().parent
 
 
 def rules(kernel):
+    pack = json.loads((ROOT / "action-pack.json").read_bytes())
+    swings = pack["view_swings"]
+    for cut, opposite in (("cut-left", "cut-right"), ("cut-right", "cut-left")):
+        start, end = swings[cut]
+        assert end == swings[opposite][0] and swings["ready-" + cut] == [start, start]
+        # Equal pitch and zero roll make the camera-space quaternion interpolation
+        # a yaw sweep. Check blade-tip depth relative to the emitter throughout.
+        assert start[1:] == end[1:] and start[2] == 0 and abs(end[0] - start[0]) < 180
+        for sample in range(101):
+            yaw = math.radians(start[0] + (end[0] - start[0]) * sample / 100)
+            assert math.cos(yaw) * math.sin(math.radians(start[1])) > 0.35
+    print("PASS both lateral arcs stay forward and share their return poses")
     k = Kernel(kernel)
     v = actor(1, 0, 0, 0)
     k.move(v, 1, 1)
