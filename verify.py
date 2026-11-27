@@ -22,6 +22,7 @@ from engine.arena import (
     fresh,
     melee,
     projectiles,
+    pursue,
     spawn_wave,
     step,
 )
@@ -276,6 +277,20 @@ def rules(kernel):
     assert attacker["clip"] == "stagger" and defender["health"] == 100
     assert defender["contact_kind"] == "guard" and len(contact_traces(defender, 10)) == 6
     assert defender["riposte_until"] == 17
+    for cut, side in (("cut-left", "right"), ("cut-right", "left"), ("overhead", "top")):
+        striker = actor(3, 0, 1, 0)
+        striker.update(yaw=math.pi, clip=cut, age=4, duration=10)
+        guard = actor(1, 0, 0, 0)
+        guard.update(clip="guard", age=2, duration=10)
+        melee(striker, [guard], 10)
+        blocked = "blocked-" + side
+        assert striker["rebound_pose"] == blocked and striker["duration"] == 7
+        assert blocked in pack["sounds"] and blocked not in pack["contact_clips"]
+        assert guard["health"] == 100 and guard["riposte_until"] == 17
+        for tick in (10, 11, 12):
+            duel["clock"] = tick
+            pursue(duel, guard, [striker])
+            assert guard["clip"] == ("guard" if tick < 12 else "cut-left")
     for offset, clip in ((-0.25, "parry-right"), (0, "parry-top"), (0.25, "parry-left")):
         foe = actor(3, offset, 1, 0)
         foe.update(yaw=math.pi, clip="overhead", age=4, duration=10)

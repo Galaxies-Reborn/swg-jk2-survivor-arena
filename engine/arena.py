@@ -639,6 +639,7 @@ def melee(p, enemies, now, nav=None):
                     remaining = max(1, e["duration"] - e["age"])
                     e["parry_pose"] = [now, "parry-" + side, remaining]
                     start(p, "stagger", 7, now)
+                    p["rebound_pose"] = "blocked-" + contact_side(p, x, z)
                     p["follow_until"] = -1
                     e["riposte_until"] = now + 7
                     push(p, e, 0.20, nav)
@@ -717,7 +718,14 @@ def pursue(s, e, players, nav=None):
     if e["style"] == 0:
         if e["clip"] in CUTS:
             melee(e, players, now, nav)
-        if e.get("riposte_until", -1) >= now and e["clip"] == "guard":
+        # Give the duelist two published ticks to show the knockaway before
+        # starting its automatic counter. Player ripostes remain input-driven.
+        parry = e.get("parry_pose")
+        if (
+            e.get("riposte_until", -1) >= now
+            and e["clip"] == "guard"
+            and (not parry or now - parry[0] >= 2)
+        ):
             start(e, "cut-left", 9, now)
             e["riposte_until"] = -1
         if (
