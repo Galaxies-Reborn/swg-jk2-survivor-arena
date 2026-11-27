@@ -438,11 +438,13 @@
     ]
   },
   "layered_locomotion": true,
+  "impact_particles": true,
   "chase_on_entry": true,
   "windups": {
     "0": {
       "attack": {
         "duration_ms": 500,
+        "interruptible_clips": ["jump", "jump-forward", "jump-back", "jump-run"],
         "clips": [
           "up-left",
           "overhead",
