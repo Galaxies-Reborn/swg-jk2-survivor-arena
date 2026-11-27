@@ -1,0 +1,99 @@
+{
+  "schema": 2,
+  "ruleset": "jk2-survivor-v1",
+  "title": "Survivor Arena",
+  "era": "pre-cu",
+  "room": "object/building/tatooine/shared_cantina_tatooine.iff",
+  "origin": [
+    8,
+    -0.895,
+    -17
+  ],
+  "appearance": "appearance/luke_skywalker.sat",
+  "styles": [
+    "Lightsaber",
+    "Blaster",
+    "Raider"
+  ],
+  "bindings": {
+    "Mouse1": "attack",
+    "Mouse2": "guard",
+    "KeyX": "switch",
+    "Space": "jump",
+    "KeyR": "restart"
+  },
+  "clips": {
+    "idle": "appearance/animation/all_b_cbt_sword_1h_standing_ready_idle_1.ans",
+    "walk": "appearance/animation/all_b_loc_walk_male.ans",
+    "overhead": "appearance/animation/all_b_cbt_sword_1h_standing_ready_vrt_slash.ans",
+    "cut-right": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_middle_r.ans",
+    "cut-left": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_middle_l.ans",
+    "down-right": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_high_r.ans",
+    "down-left": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_high_l.ans",
+    "up-right": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_low_r.ans",
+    "up-left": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_low_l.ans",
+    "back": "appearance/animation/all_b_cbt_sword_1h_standing_ready_spin_hrz_slash_r.ans",
+    "guard": "appearance/animation/all_b_cbt_sword_1h_standing_ready_block_hrz_high.ans",
+    "down": "appearance/animation/all_b_incapacitated_face_up.ans",
+    "jump": "appearance/animation/all_b_loc_standing_jump_up.ans",
+    "stagger": "appearance/animation/all_b_cbt_sword_1h_standing_ready_off_balance.ans",
+    "fire": "appearance/animation/all_b_cbt_pistol_standing_ready_fire_single.ans",
+    "aim": "appearance/animation/all_b_cbt_pistol_standing_aimed_idle_front.ans"
+  },
+  "props": [
+    {
+      "styles": [
+        0
+      ],
+      "joint": "hold_r",
+      "mesh": "appearance/mesh/wp_mle_sword_lightsaber_luke_l0.msh",
+      "beams": [
+        {
+          "start": "tr1s",
+          "end": "tr1e",
+          "radius": 0.018,
+          "colors": [
+            [
+              52,
+              166,
+              255
+            ],
+            [
+              255,
+              62,
+              40
+            ]
+          ]
+        }
+      ],
+      "travels": false
+    },
+    {
+      "joint": "hold_r",
+      "mesh": "appearance/mesh/wp_pistol_d18_l0.msh",
+      "styles": [
+        1
+      ],
+      "beams": [],
+      "travels": false
+    },
+    {
+      "joint": "hold_r",
+      "mesh": "appearance/mesh/wp_mle_baton_gaderiffi_l0.msh",
+      "styles": [
+        2
+      ],
+      "beams": [],
+      "travels": false
+    }
+  ],
+  "overrides": {
+    "1": {
+      "idle": "aim"
+    }
+  },
+  "first_person": true,
+  "appearances": {
+    "2": "appearance/tusken_raider_m.sat"
+  }
+}
