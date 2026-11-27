@@ -209,8 +209,8 @@ def decode(data, cfg, model, saber):
         for line in cfg.decode("latin1").splitlines()
         if len(parts := line.split()) >= 5
     }
-    clips = {}
-    for clip, name in ACTIONS.items():
+
+    def read_clip(name):
         first, count, _, fps = map(float, entries[name][:4])
         if not (
             first.is_integer()
@@ -222,7 +222,20 @@ def decode(data, cfg, model, saber):
         ):
             raise ValueError(f"Unsupported frame range for {name}")
         track = [pose(i) for i in range(int(first), int(first + count))]
-        clips[clip] = dict(fps=abs(fps), frames=track if fps > 0 else track[::-1])
+        return abs(fps), track if fps > 0 else track[::-1]
+
+    clips = {}
+    for clip, name in ACTIONS.items():
+        fps, frames_out = read_clip(name)
+        entry = 0
+        if clip in ("cut-right", "cut-left"):
+            start = "BOTH_S1_S1__L" if clip == "cut-right" else "BOTH_S1_S1__R"
+            _, windup = read_clip(start)
+            # The start clip leads into the first frame of the attack. Connected
+            # returns enter at the strike marker and bypass this guard-to-side move.
+            entry = len(windup) - 1
+            frames_out = windup[:-1] + frames_out
+        clips[clip] = dict(fps=fps, frames=frames_out, entry=entry)
     return clips
 
 
