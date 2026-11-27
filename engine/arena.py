@@ -184,6 +184,7 @@ def actor(slot, x, z, style):
 
 
 def start(a, clip, ticks, now):
+    a.pop("rebound_pose", None)
     a.pop("parry_pose", None)
     a.pop("ready_origin", None)
     a.pop("steer_until", None)
@@ -566,6 +567,15 @@ def contact_traces(actor, now):
     return traces
 
 
+def contact_side(fighter, x, z):
+    lateral = (x - fighter["x"]) * math.cos(fighter["yaw"]) - (
+        z - fighter["z"]
+    ) * math.sin(fighter["yaw"])
+    if abs(lateral) < 0.10:
+        return "top"
+    return "left" if lateral > 0 else "right"
+
+
 def melee(p, enemies, now, nav=None):
     if p["clip"] not in CUTS:
         return
@@ -584,8 +594,10 @@ def melee(p, enemies, now, nav=None):
             if other:
                 contact = blade_contact(segment, other)
                 if contact and (not nav or nav.clear(p, e)):
-                    for fighter in (p, e):
+                    for fighter, role in ((p, "rebound"), (e, "clash")):
+                        side = contact_side(fighter, contact[0], contact[2])
                         start(fighter, "stagger", 4, now)
+                        fighter["rebound_pose"] = role + "-" + side
                         fighter["follow_until"] = -1
                     e["clash"] = [now, *contact]
                     e["contact_kind"] = "clash"
@@ -623,12 +635,7 @@ def melee(p, enemies, now, nav=None):
                     # A timed block turns the defender's blade into the incoming
                     # cut. Its visual recovery can be interrupted by a riposte.
                     _, x, _, z = e["clash"]
-                    lateral = (x - e["x"]) * math.cos(e["yaw"]) - (
-                        z - e["z"]
-                    ) * math.sin(e["yaw"])
-                    side = "top"
-                    if abs(lateral) >= 0.10:
-                        side = "left" if lateral > 0 else "right"
+                    side = contact_side(e, x, z)
                     remaining = max(1, e["duration"] - e["age"])
                     e["parry_pose"] = [now, "parry-" + side, remaining]
                     start(p, "stagger", 7, now)
@@ -855,6 +862,8 @@ def step(state, seats, k):
         view["y"] += a.get("ground", 0.0)
         if a["style"] == 2 and a["clip"] == "overhead":
             view["clip"] = "staff-strike"
+        if a["clip"] == "stagger" and "rebound_pose" in a:
+            view["clip"] = a["rebound_pose"]
         view.update(
             elapsed_ms=min(
                 max(0, a["age"] - int(a["clip"].startswith("jump"))), a["duration"]

@@ -263,6 +263,11 @@ def rules(kernel):
     melee(crossed, [attacker], 9)
     assert (crossed["clip"], attacker["clip"]) == ("stagger", "stagger")
     assert crossed["health"] == attacker["health"] == 100 and attacker["clash"][0] == 9
+    assert (crossed["rebound_pose"], attacker["rebound_pose"]) == ("rebound-top", "clash-top")
+    for fighter in (crossed, attacker):
+        cue = fighter["rebound_pose"]
+        assert (cue in pack["sounds"]) == (cue in pack["contact_clips"]) == cue.startswith("clash-")
+        assert cue in pack["clips"] and cue in pack["view_swings"]
     assert blade_contact(((0, 0, 0), (1, 0, 0)), ((0.5, 1, -1), (0.5, 1, 1))) is None
     attacker.update(clip="overhead", age=4, duration=10, landed=[])
     defender = actor(1, 0, 0, 0)
