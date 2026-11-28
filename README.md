@@ -18,7 +18,7 @@ The converter writes one player-local file under `.local/action-motion/`. Removi
 
 ## Play on Windows
 
-Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, walk_upper, particle_contact_trails, sounds, view_swings and view_guard support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
+Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, walk_upper, particle_contact_trails, sounds, sample_start_ms, view_swings and view_guard support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
 
 ```powershell
 ./Start-Arena.ps1 -Standalone '<path to spacetimedb-standalone.exe>' -ClientRoot '<game client root>'

@@ -433,6 +433,12 @@
       ]
     ]
   },
+  "sample_start_ms": {
+    "sample/wep_lightsaber_miss_01.wav": 175,
+    "sample/wep_lightsaber_miss_02.wav": 195,
+    "sample/wep_lightsaber_miss_03.wav": 180,
+    "sample/wep_lightsaber_miss_04.wav": 150
+  },
   "sounds": {
     "surface-bolt-metal": ["sample/wep_lt_blaster_hit_metal.wav"],
     "surface-bolt-wood": ["sample/wep_lt_blaster_hit_wood.wav"],
