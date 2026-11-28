@@ -434,6 +434,10 @@
     ]
   },
   "sounds": {
+    "surface-bolt-metal": ["sample/wep_lt_blaster_hit_metal.wav"],
+    "surface-bolt-wood": ["sample/wep_lt_blaster_hit_wood.wav"],
+    "surface-saber-metal": ["sample/wep_lsaber_hit_metal_01.wav", "sample/wep_lsaber_hit_metal_02.wav", "sample/wep_lsaber_hit_metal_03.wav"],
+    "surface-saber-wood": ["sample/wep_lsaber_hit_wood_01.wav", "sample/wep_lsaber_hit_wood_02.wav", "sample/wep_lsaber_hit_wood_03.wav"],
     "surface-bolt": ["sample/wep_lt_blaster_hit_stone.wav"],
     "surface-saber": ["sample/wep_lsaber_hit_stone_01.wav", "sample/wep_lsaber_hit_stone_02.wav", "sample/wep_lsaber_hit_stone_03.wav"],
     "engage-2": ["voice/sample/npc_tusken_howl_01.wav", "voice/sample/npc_tusken_howl_02.wav", "voice/sample/npc_tusken_howl_03.wav"],
