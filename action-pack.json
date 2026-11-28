@@ -190,6 +190,11 @@
   "frame_rate": 60,
   "cut_playback_ms": {"300": 300, "400": 350, "500": 450},
   "return_pairs": [["cut-left", "cut-right"]],
+  "view_guard": {
+    "clips": ["guard", "parry-top", "parry-left", "parry-right"],
+    "grip_offset_m": [0.02, 0.17, -0.28],
+    "forward_fraction": 0.58
+  },
   "view_swings": {
     "recover-cut-right": [[43.28484, 23.19158, 67.30926], [0, 24, 14]],
     "recover-cut-left": [[-43.28484, 23.19158, -67.30926], [0, 24, 14]],
