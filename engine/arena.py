@@ -862,8 +862,13 @@ def step(state, seats, k):
     ]
     for e in falling:
         e["age"] = s["clock"] - e["serial"]
+    contacts = []
     for a in active + enemies + falling:
-        trails.extend(contact_traces(a, s["clock"])[: max(0, 32 - len(trails))])
+        streaks = contact_traces(a, s["clock"])
+        if streaks:
+            tick, x, y, z = a["clash"]
+            contacts.append(dict(slot=a["slot"], tick=tick, x=x, y=y, z=z))
+        trails.extend(streaks[: max(0, 32 - len(trails))])
         view = {
             name: a[name]
             for name in (
@@ -916,4 +921,4 @@ def step(state, seats, k):
         for p in active if p["health"] and "jump_clip" in p and "takeoff" in p
         and 0 <= s["clock"] - p["takeoff"] < JUMP_TICKS
     ]
-    return s, dict(actors=actors, caption=caption, trails=trails, lower_poses=lower_poses)
+    return s, dict(actors=actors, caption=caption, trails=trails, lower_poses=lower_poses, contacts=contacts)

@@ -170,6 +170,7 @@ pub fn enter(ctx: &ReducerContext, pack: String) -> Result<(), String> {
     p.seen = ctx.timestamp.to_micros_since_unix_epoch();
     p.seq = 0;
     ctx.db.lower_pose().slot().delete(p.slot);
+    ctx.db.contact().slot().delete(p.slot);
     p.inputs.clear();
     p.online = true;
     if ctx.db.lease_clock().count() == 0 {
@@ -260,9 +261,21 @@ pub fn work(ctx: &ViewContext) -> Vec<Work> {
 struct Output {
     actors: Vec<Actor>,
     #[serde(default)]
+    contacts: Vec<Contact>,
+    #[serde(default)]
     lower_poses: Vec<LowerPose>,
     caption: String,
     trails: Vec<Vec<f32>>,
+}
+#[derive(Deserialize)]
+#[spacetimedb::table(accessor=contact,private)]
+pub struct Contact {
+    #[primary_key]
+    slot: u8,
+    tick: u64,
+    x: f32,
+    y: f32,
+    z: f32,
 }
 #[derive(Deserialize)]
 #[spacetimedb::table(accessor=lower_pose,private)]
@@ -298,6 +311,7 @@ pub fn commit_frame(
     }
     let frame: Output = serde_json::from_str(&output).map_err(|_| "invalid scene")?;
     if frame.actors.len() > 32
+        || frame.contacts.len() > frame.actors.len()
         || frame.caption.len() > 160
         || frame.trails.len() > 32
         || frame
@@ -327,6 +341,23 @@ pub fn commit_frame(
         }
         s.inputs.retain(|i| i.seq > ack);
         ctx.db.seat().slot().update(s);
+    }
+    let mut contact_slots = std::collections::BTreeSet::new();
+    for contact in frame.contacts {
+        if !ids.contains(&contact.slot) || !contact_slots.insert(contact.slot)
+            || [contact.x, contact.y, contact.z].iter().any(|v| !v.is_finite() || v.abs() > 128.) {
+            return Err("invalid contact".into());
+        }
+        if ctx.db.contact().slot().find(contact.slot).is_some() {
+            ctx.db.contact().slot().update(contact);
+        } else {
+            ctx.db.contact().insert(contact);
+        }
+    }
+    for old in ctx.db.contact().iter().collect::<Vec<_>>() {
+        if !contact_slots.contains(&old.slot) {
+            ctx.db.contact().slot().delete(old.slot);
+        }
     }
     let mut lower_slots = std::collections::BTreeSet::new();
     for pose in frame.lower_poses {
@@ -381,6 +412,8 @@ pub struct Avatar {
     lower_serial: u64,
     lower_elapsed_ms: u32,
     lower_duration_ms: u32,
+    contact_tick: u64,
+    contact_point: Vec<f32>,
 }
 #[spacetimedb::view(accessor=action_scene,public,primary_key=slot)]
 pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
@@ -418,6 +451,7 @@ pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
         .map(|p| {
             let mine = p.slot == me.slot;
             let lower = ctx.db.lower_pose().slot().find(p.slot);
+            let contact = ctx.db.contact().slot().find(p.slot);
             Avatar {
                 slot: p.slot,
                 mine,
@@ -447,6 +481,8 @@ pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
                 lower_elapsed_ms: lower.as_ref().map_or(0, |l| l.elapsed_ms),
                 lower_duration_ms: lower.as_ref().map_or(0, |l| l.duration_ms),
                 lower_clip: lower.map_or_else(String::new, |l| l.clip),
+                contact_tick: contact.as_ref().map_or(0, |c| c.tick),
+                contact_point: contact.map_or_else(Vec::new, |c| vec![c.x, c.y, c.z]),
             }
         })
         .collect()

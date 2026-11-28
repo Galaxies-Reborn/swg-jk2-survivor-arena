@@ -407,6 +407,42 @@ def denied(call):
     raise AssertionError("Expected server rejection")
 
 
+def verify_contact_publication(worker, a, b, kernel):
+    # Resolve a real blade clash before stepping the normal scene publisher.
+    state = fresh()
+    state["clock"] = 9
+    target = actor(3, 0, 1, 0)
+    target.update(yaw=math.pi, clip="overhead", age=4, duration=10)
+    striker = actor(1, 0, 0, 0)
+    striker.update(clip="overhead", age=4, duration=10)
+    melee(striker, [target], state["clock"])
+    tick, *point = target["clash"]
+    state["enemies"] = [target]
+    for age in (1, 2, 5):
+        state["clock"] = tick + age - 1
+        job = json.loads(worker.rows("simulation_work")[0]["snapshot"])
+        state, frame = step(state, job["seats"], kernel)
+        time.sleep(0.05)
+        if age == 1:
+            invalid = dict(frame, contacts=[dict(frame["contacts"][0], slot=32)])
+            denied(lambda: worker.call("commit_frame", [
+                job["revision"], [0, 0], json.dumps(state), json.dumps(invalid)
+            ]))
+        worker.call("commit_frame", [job["revision"], [0, 0], json.dumps(state), json.dumps(frame)])
+        for seat in (a, b):
+            row = next(r for r in seat.rows() if r["slot"] == 3)
+            if age < 5:
+                assert row["contact_tick"] == tick and len(row["contact_point"]) == 3
+                assert math.dist(row["contact_point"], point) < 1e-5
+            else:
+                assert row["contact_point"] == []
+    job = json.loads(worker.rows("simulation_work")[0]["snapshot"])
+    state, frame = step(fresh(), job["seats"], kernel)
+    time.sleep(0.05)
+    worker.call("commit_frame", [job["revision"], [0, 0], json.dumps(state), json.dumps(frame)])
+    print("PASS two players receive the resolved blade crossing and its expiry", flush=True)
+
+
 def live(endpoint, wasm, kernel):
     with tempfile.TemporaryDirectory() as temp:
         directory = Path(temp) / "profiles"
@@ -431,6 +467,8 @@ def live(endpoint, wasm, kernel):
         denied(lambda: outsider.call("enter", ["jk2-survivor-v1"]))
         denied(lambda: a.client.call("commit_frame", [0, [0, 0], "{}", "{}"]))
         denied(lambda: outsider.rows("arena"))
+        denied(lambda: outsider.rows("contact"))
+        denied(lambda: a.client.rows("contact"))
         old = b.epoch
         b.enter()
         denied(lambda: b.client.call("input", [old, 1, 0, 0, 0, 0, 0, "attack"]))
@@ -449,6 +487,7 @@ def live(endpoint, wasm, kernel):
                 ]
             )
 
+        verify_contact_publication(worker, a, b, Kernel(kernel.resolve()))
         proc = launch()
         try:
             # Wait for a published simulation frame before timing the jump.
