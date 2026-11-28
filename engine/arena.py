@@ -243,7 +243,7 @@ def spawn_wave(s, nav=None):
         if i == 0 or (i >= 4 and i % 4 == 0):
             e.update(style=0, health=min(100, 52 + 4 * s["wave"]))
         else:
-            e["health"] = min(100, 20 + 5 * s["wave"])
+            e["health"] = min(100, 38 + 5 * s["wave"])
         if i < 2:
             s["enemies"].append(e)
         else:
@@ -513,6 +513,10 @@ def blade(actor, frame_fraction):
     if not 0.22 <= phase <= 0.72:
         return None
     t = (phase - 0.22) / 0.50
+    if actor["slot"] <= 2 and actor["duration"] == 8 and actor["clip"] in ("cut-left", "cut-right"):
+        # The player's linked lateral cut carries its outgoing guard before
+        # accelerating across the body. Keep both active-window boundaries.
+        t *= 0.15 + 0.85 * t
     start_yaw, end_yaw, top, bottom = SWEEPS[CUTS.index(actor["clip"])]
     yaw = actor["yaw"] - start_yaw - (end_yaw - start_yaw) * t
     pitch = actor["pitch"]
@@ -592,8 +596,12 @@ def contact_side(fighter, x, z):
 def melee(p, enemies, now, nav=None):
     if p["clip"] not in CUTS:
         return
-    for sample in range(5):
-        fraction = sample / 4
+    # Keep the fast end of a return cut resolved when comparing two moving blades.
+    intervals = 8 if p["clip"] in ("cut-left", "cut-right") or any(
+        e["style"] == 0 and e["clip"] in ("cut-left", "cut-right") for e in enemies
+    ) else 4
+    for sample in range(intervals + 1):
+        fraction = sample / intervals
         segment = blade(p, fraction)
         if not segment:
             continue
@@ -717,6 +725,49 @@ def projectiles(s, nav=None):
     return trails
 
 
+def staff_attack(s, e, players, nav):
+    """Resolve the committed gaderffii blow in its original facing."""
+    sweeping = e["clip"] == "staff-sweep"
+    age = e["age"]
+    fx, fz = math.sin(e["yaw"]), math.cos(e["yaw"])
+    if not sweeping and 4 <= age <= 6:
+        # Plant, drive forward, then strike. Stop short of a player's capsule.
+        gap = min(distance(e, p) for p in players)
+        advance = min(0.22, max(0.0, gap - 0.64))
+        if nav:
+            nav.slide(e, fx * advance, fz * advance)
+        else:
+            e["x"] += fx * advance
+            e["z"] += fz * advance
+    if age != (9 if sweeping else 7):
+        return
+    for p in sorted(players, key=lambda target: (distance(e, target), target["slot"])):
+        dx, dz = p["x"] - e["x"], p["z"] - e["z"]
+        forward, lateral = dx * fx + dz * fz, abs(dx * fz - dz * fx)
+        if (forward < 0 or distance(e, p) > (1.60 if sweeping else 1.52)
+                or lateral > (1.32 if sweeping else 0.52)
+                or p["y"] > (0.52 if sweeping else 0.95)
+                or (nav and not nav.clear(e, p))):
+            continue
+        now = s["clock"]
+        gap = max(0.01, distance(e, p))
+        x, z = p["x"] - 0.20 * dx / gap, p["z"] - 0.20 * dz / gap
+        p["clash"] = [now, x, p.get("ground", 0.) + p["y"] + (0.7 if sweeping else 1.1), z]
+        if p["clip"] == "guard" and faces(p, e):
+            p["contact_kind"] = "guard"
+            start(e, "stagger", 13, now)
+            if p["age"] <= 4:
+                p["riposte_until"] = now + 7
+            return
+        p["contact_kind"] = "hit"
+        hurt(p, min(30, (13 if sweeping else 16) + s["wave"]), now)
+        if p["health"]:
+            start(p, "stagger", 3, now)
+            p["rebound_pose"] = "staff-impact"
+        push(p, e, 0.12 if sweeping else 0.20, nav)
+        return
+
+
 def pursue(s, e, players, nav=None):
     if not e["health"] or not players:
         return
@@ -725,7 +776,7 @@ def pursue(s, e, players, nav=None):
     dx, dz = p["x"] - e["x"], p["z"] - e["z"]
     dist = math.hypot(dx, dz)
     # Commit the facing at the beginning of a cut so its telegraph can be dodged.
-    if e["clip"] not in CUTS:
+    if e["clip"] not in CUTS and e["clip"] != "staff-sweep":
         e["yaw"] = math.atan2(dx, dz)
     e["age"] += 1
     if e["style"] == 0:
@@ -754,32 +805,22 @@ def pursue(s, e, players, nav=None):
     if e["duration"] and e["age"] >= e["duration"]:
         finish(e, now)
     if e["duration"]:
-        if (
-            e["style"] == 2
-            and e["clip"] == "overhead"
-            and e["age"] == 6
-            and dist < 1.25
-            and p["y"] < 0.8
-            and (not nav or nav.clear(e, p))
-        ):
-            facing = -dx * math.sin(p["yaw"]) - dz * math.cos(p["yaw"])
-            if p["clip"] == "guard" and facing >= 0.2 * dist:
-                start(e, "stagger", 13, now)
-                if p["age"] <= 4:
-                    p["riposte_until"] = now + 7
-            else:
-                hurt(p, min(25, 6 + s["wave"]), now)
+        if e["style"] == 2 and e["clip"] in ("overhead", "staff-sweep"):
+            staff_attack(s, e, players, nav)
         return
-    if dist <= (1.48 if e["style"] == 0 else 0.97) and (not nav or nav.clear(e, p)):
+    if dist <= (1.48 if e["style"] == 0 else 1.94) and (not nav or nav.clear(e, p)):
         if e["style"] == 0:
             sequence = ("down-right", "cut-left", "overhead", "up-right")
             index = e.get("cut_index", 0)
             start(e, sequence[index % len(sequence)], 13, now)
             e["cut_index"] = index + 1
         else:
-            start(e, "overhead", 20, now)
+            sweep = dist <= 1.48 and e.get("last_staff") == "overhead"
+            attack_clip = "staff-sweep" if sweep else "overhead"
+            start(e, attack_clip, 19 if sweep else 18, now)
+            e["last_staff"] = attack_clip
     else:
-        speed = (2.6 if e["style"] == 0 else min(2.3, 1.05 + s["wave"] * 0.10)) * DT
+        speed = (2.6 if e["style"] == 0 else min(3.6, 2.85 + s["wave"] * 0.12)) * DT
         if nav:
             wx, wz = nav.waypoint(e, p)
             dx, dz = wx - e["x"], wz - e["z"]

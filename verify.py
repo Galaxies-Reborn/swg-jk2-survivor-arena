@@ -33,7 +33,51 @@ from server import Client, http, provision
 ROOT = Path(__file__).resolve().parent
 
 
+def staff_counters():
+    def exchange(sweeping=False, dodge=0., jump=0., guard=False, turn=math.pi):
+        s = fresh()
+        s["wave"] = 1
+        e = actor(3, 0., 0., 2)
+        p = actor(1, 0., 1.35 if sweeping else 1.85, 0)
+        if sweeping:
+            e["last_staff"] = "overhead"
+        pursue(s, e, [p])
+        assert e["clip"] == ("staff-sweep" if sweeping else "overhead")
+        p.update(x=dodge, y=jump, yaw=turn)
+        for age in range(1, 10 if sweeping else 8):
+            s["clock"] = age
+            if guard and age == (9 if sweeping else 7):
+                p.update(clip="guard", age=2)
+            pursue(s, e, [p])
+            assert e["yaw"] == 0.
+            if age < (9 if sweeping else 7):
+                assert p["health"] == 100
+        return e, p
+
+    raider, target = exchange()
+    assert target["health"] == 83 and raider["z"] > 0.6 and target["contact_kind"] == "hit"
+    assert exchange(dodge=0.8)[1]["health"] == 100
+    assert exchange(sweeping=True, dodge=0.65)[1]["health"] == 86
+    assert exchange(sweeping=True, jump=0.6)[1]["health"] == 100
+    raider, target = exchange(guard=True)
+    assert target["health"] == 100 and target["contact_kind"] == "guard"
+    assert raider["clip"] == "stagger" and target["riposte_until"] > 7
+    assert exchange(guard=True, turn=0.)[1]["health"] == 83
+    print("PASS committed Tusken lunge, sweep, sidestep, jump and facing parry")
+
+
 def rules(kernel):
+    staff_counters()
+    for clip, sign in (("cut-left", 1), ("cut-right", -1)):
+        fighter = actor(1, 0, 0, 0)
+        fighter.update(clip=clip, duration=8)
+        def at(phase):
+            position = phase * fighter["duration"]
+            fighter["age"] = math.floor(position) + 1
+            return blade(fighter, position % 1)
+        assert at(0.21) is None and at(0.73) is None
+        assert at(0.54)[1][0] * sign < 0 < at(0.58)[1][0] * sign
+    print("PASS linked saber sweeps cross forward during the displayed return cut")
     pack = json.loads((ROOT / "action-pack.json").read_bytes())
     swings = pack["view_swings"]
     for cut, opposite in (("cut-left", "cut-right"), ("cut-right", "cut-left")):
@@ -407,6 +451,37 @@ def denied(call):
     raise AssertionError("Expected server rejection")
 
 
+def verify_staff_publication(worker, a, b, kernel):
+    # Publish a sequence of real simulated frames through the authority boundary.
+    # Place the target at staff range to exercise both attacks in a short test.
+    state = fresh()
+    raider = actor(4, -0.55, -1.65, 2)
+    state.update(phase="fighting", wave=1, enemies=[raider])
+    seen = set()
+    for _ in range(34):
+        a.send()
+        b.send()
+        job = json.loads(worker.rows("simulation_work")[0]["snapshot"])
+        state, frame = step(state, job["seats"], kernel)
+        time.sleep(0.05)
+        seq = [0, 0]
+        for seat in job["seats"]:
+            seq[seat["slot"] - 1] = seat["seq"]
+        worker.call("commit_frame", [job["revision"], seq, json.dumps(state), json.dumps(frame)])
+        observations = []
+        for seat in (a, b):
+            rows = seat.rows()
+            raider_row = next(r for r in rows if r["slot"] == 4)
+            target = next(r for r in rows if r["slot"] == 1)
+            observations.append((raider_row["clip"], target["health"], target["contact_point"]))
+        assert observations[0] == observations[1]
+        clip, health, point = observations[0]
+        if point:
+            seen.add((clip, health))
+    assert ("staff-strike", 83) in seen and ("staff-sweep", 69) in seen, seen
+    print("PASS both identities observe Tusken lunge and sweep damage and impact positions")
+
+
 def verify_contact_publication(worker, a, b, kernel):
     # Resolve a real blade clash before stepping the normal scene publisher.
     state = fresh()
@@ -493,14 +568,15 @@ def live(endpoint, wasm, kernel):
                 ]
             )
 
+        verify_staff_publication(worker, a, b, Kernel(kernel.resolve()))
         verify_contact_publication(worker, a, b, Kernel(kernel.resolve()))
+        staged_revision = json.loads(worker.rows("simulation_work")[0]["snapshot"])["revision"]
         proc = launch()
         try:
-            # Wait for a published simulation frame before timing the jump.
+            # The contact checks already published a Wave caption. Wait for
+            # the live worker to advance the realm before timing the jump.
             ready = time.monotonic() + 8
-            while not any(
-                r["mine"] and r["caption"].startswith("Wave ") for r in a.rows()
-            ):
+            while json.loads(worker.rows("simulation_work")[0]["snapshot"])["revision"] == staged_revision:
                 assert proc.poll() is None and time.monotonic() < ready, (
                     "worker startup"
                 )

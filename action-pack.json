@@ -35,6 +35,8 @@
     "recover-down-left": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_high_l.ans",
     "recover-overhead": "appearance/animation/all_b_cbt_sword_1h_standing_ready_vrt_slash.ans",
     "overhead": "appearance/animation/all_b_cbt_sword_1h_standing_ready_vrt_slash.ans",
+    "staff-impact": "appearance/animation/all_b_cbt_sword_1h_standing_ready_off_balance.ans",
+    "staff-sweep": "appearance/animation/all_b_cbt_sword_2h_standing_ready_hrz_slash_middle_r.ans",
     "staff-strike": "appearance/animation/all_b_cbt_sword_2h_standing_ready_vrt_slash.ans",
     "cut-right": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_middle_r.ans",
     "cut-left": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_middle_l.ans",
@@ -123,6 +125,9 @@
     }
   ],
   "overrides": {
+    "2": {
+      "walk": "run"
+    },
     "1": {
       "idle": "aim",
       "walk": "run"
@@ -140,6 +145,7 @@
   ],
   "movement_lead_m": 0.14,
   "gait_full_speed_mps": 5.8,
+  "actor_templates": {"2": "object/mobile/shared_tusken_raider.iff"},
   "appearances": {
     "2": "appearance/tusken_raider_m.sat"
   },
@@ -416,6 +422,9 @@
     ]
   },
   "sounds": {
+    "engage-2": ["voice/sample/npc_tusken_howl_01.wav", "voice/sample/npc_tusken_howl_02.wav", "voice/sample/npc_tusken_howl_03.wav"],
+    "impact-staff-impact": ["sample/wep_blunt_vibro_hit_metal.wav"],
+    "staff-sweep": ["sample/wep_lrg_blunt_miss.wav"],
     "staff-strike": [
       "sample/wep_lrg_blunt_miss.wav"
     ],
