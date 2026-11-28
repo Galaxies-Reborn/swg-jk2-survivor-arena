@@ -261,11 +261,19 @@ pub fn work(ctx: &ViewContext) -> Vec<Work> {
 struct Output {
     actors: Vec<Actor>,
     #[serde(default)]
+    bolt_trail_count: u8,
+    #[serde(default)]
     contacts: Vec<Contact>,
     #[serde(default)]
     lower_poses: Vec<LowerPose>,
     caption: String,
     trails: Vec<Vec<f32>>,
+}
+#[spacetimedb::table(accessor=bolt_trails,private)]
+pub struct BoltTrails {
+    #[primary_key]
+    id: u8,
+    count: u8,
 }
 #[derive(Deserialize)]
 #[spacetimedb::table(accessor=contact,private)]
@@ -314,6 +322,7 @@ pub fn commit_frame(
         || frame.contacts.len() > frame.actors.len()
         || frame.caption.len() > 160
         || frame.trails.len() > 32
+        || usize::from(frame.bolt_trail_count) > frame.trails.len()
         || frame
             .trails
             .iter()
@@ -383,6 +392,14 @@ pub fn commit_frame(
     a.actors = frame.actors;
     a.caption = frame.caption;
     a.trails = frame.trails;
+    let count = frame.bolt_trail_count;
+    if let Some(previous) = ctx.db.bolt_trails().id().find(0) {
+        if previous.count != count {
+            ctx.db.bolt_trails().id().update(BoltTrails { id: 0, count });
+        }
+    } else if count > 0 {
+        ctx.db.bolt_trails().insert(BoltTrails { id: 0, count });
+    }
     ctx.db.arena().id().update(a);
     Ok(())
 }
@@ -414,6 +431,7 @@ pub struct Avatar {
     lower_duration_ms: u32,
     contact_tick: u64,
     contact_point: Vec<f32>,
+    bolt_trail_count: u8,
 }
 #[spacetimedb::view(accessor=action_scene,public,primary_key=slot)]
 pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
@@ -483,6 +501,7 @@ pub fn scene(ctx: &ViewContext) -> Vec<Avatar> {
                 lower_clip: lower.map_or_else(String::new, |l| l.clip),
                 contact_tick: contact.as_ref().map_or(0, |c| c.tick),
                 contact_point: contact.map_or_else(Vec::new, |c| vec![c.x, c.y, c.z]),
+                bolt_trail_count: if mine { ctx.db.bolt_trails().id().find(0).map_or(0, |b| b.count) } else { 0 },
             }
         })
         .collect()

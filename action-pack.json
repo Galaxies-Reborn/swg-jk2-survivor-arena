@@ -105,6 +105,7 @@
     {
       "joint": "hold_r",
       "mesh": "appearance/mesh/wp_pistol_d18_l0.msh",
+      "view_blaster": { "muzzle": "muzzle", "fire_clip": "fire" },
       "styles": [
         1
       ],
@@ -492,6 +493,7 @@
   },
   "layered_locomotion": true,
   "impact_particles": true,
+  "surface_scars": true,
   "contact_clips": ["parry-top", "parry-left", "parry-right", "clash-top", "clash-left", "clash-right"],
   "chase_on_entry": true,
   "windups": {

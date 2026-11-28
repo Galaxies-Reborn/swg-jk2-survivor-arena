@@ -418,6 +418,7 @@ def verify_contact_publication(worker, a, b, kernel):
     melee(striker, [target], state["clock"])
     tick, *point = target["clash"]
     state["enemies"] = [target]
+    state.update(phase="fighting", bolts=[dict(pos=[3., 1.4, 0.], dir=[1., 0., 0.], damage=14, life=15)])
     for age in (1, 2, 5):
         state["clock"] = tick + age - 1
         job = json.loads(worker.rows("simulation_work")[0]["snapshot"])
@@ -430,8 +431,13 @@ def verify_contact_publication(worker, a, b, kernel):
             ]))
         worker.call("commit_frame", [job["revision"], [0, 0], json.dumps(state), json.dumps(frame)])
         for seat in (a, b):
-            row = next(r for r in seat.rows() if r["slot"] == 3)
+            rows = seat.rows()
+            owner = next(r for r in rows if r["mine"])
+            assert owner["bolt_trail_count"] == 1 and owner["trails"][0][0] >= 3.
+            row = next(r for r in rows if r["slot"] == 3)
+            assert row["bolt_trail_count"] == 0
             if age < 5:
+                assert len(owner["trails"]) == 7
                 assert row["contact_tick"] == tick and len(row["contact_point"]) == 3
                 assert math.dist(row["contact_point"], point) < 1e-5
             else:

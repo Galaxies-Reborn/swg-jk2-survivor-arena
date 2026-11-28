@@ -862,6 +862,7 @@ def step(state, seats, k):
     ]
     for e in falling:
         e["age"] = s["clock"] - e["serial"]
+    bolt_trail_count = len(trails)
     contacts = []
     for a in active + enemies + falling:
         streaks = contact_traces(a, s["clock"])
@@ -921,4 +922,5 @@ def step(state, seats, k):
         for p in active if p["health"] and "jump_clip" in p and "takeoff" in p
         and 0 <= s["clock"] - p["takeoff"] < JUMP_TICKS
     ]
-    return s, dict(actors=actors, caption=caption, trails=trails, lower_poses=lower_poses, contacts=contacts)
+    return s, dict(actors=actors, caption=caption, trails=trails, lower_poses=lower_poses,
+                   contacts=contacts, bolt_trail_count=bolt_trail_count)
