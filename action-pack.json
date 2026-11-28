@@ -434,6 +434,8 @@
     ]
   },
   "sounds": {
+    "surface-bolt": ["sample/wep_lt_blaster_hit_stone.wav"],
+    "surface-saber": ["sample/wep_lsaber_hit_stone_01.wav", "sample/wep_lsaber_hit_stone_02.wav", "sample/wep_lsaber_hit_stone_03.wav"],
     "engage-2": ["voice/sample/npc_tusken_howl_01.wav", "voice/sample/npc_tusken_howl_02.wav", "voice/sample/npc_tusken_howl_03.wav"],
     "impact-staff-impact": ["sample/wep_blunt_vibro_hit_metal.wav"],
     "staff-sweep": ["sample/wep_lrg_blunt_miss.wav"],
