@@ -38,6 +38,12 @@ ACTIONS = {
     "down-right": "BOTH_A1_TL_BR",
     "down-left": "BOTH_A1_TR_BL",
     "overhead": "BOTH_A1_T__B_",
+    # End each preparation at the authored start quadrant of its next strike.
+    "ready-up-right": "BOTH_S1_S1_BL",
+    "ready-up-left": "BOTH_S1_S1_BR",
+    "ready-down-right": "BOTH_S1_S1_TL",
+    "ready-down-left": "BOTH_S1_S1_TR",
+    "ready-overhead": "BOTH_S1_S1_T_",
     "ready-cut-right": "BOTH_T1__R__L",
     "ready-cut-left": "BOTH_T1__L__R",
 }
@@ -263,6 +269,11 @@ def decode(data, cfg, model, saber):
             # returns enter at the strike marker and bypass this guard-to-side move.
             entry = len(windup) - 1
             frames_out = windup[:-1] + frames_out
+        if clip.startswith("ready-") and clip not in ("ready-cut-left", "ready-cut-right"):
+            # Retail starts and strikes are separate frame ranges. Include the
+            # strike's first sample so the preparation can land on the same pose.
+            _, strike = read_clip(ACTIONS[clip.removeprefix("ready-")])
+            frames_out.append(strike[0])
         clips[clip] = dict(fps=fps, frames=frames_out, entry=entry)
     # All moves start from the same calibration so a return keeps the palm
     # orientation of the preceding move even when it skips its windup.
