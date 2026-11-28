@@ -23,8 +23,8 @@
     "KeyR": "restart"
   },
   "clips": {
-    "sidestep-left": "appearance/animation/all_b_cbt_pistol_sidestep_l_ready.ans",
-    "sidestep-right": "appearance/animation/all_b_cbt_pistol_sidestep_r_ready.ans",
+    "sidestep-left": "appearance/animation/all_b_cbt_pistol_sidestep_l_aimed.ans",
+    "sidestep-right": "appearance/animation/all_b_cbt_pistol_sidestep_r_aimed.ans",
     "idle": "appearance/animation/all_b_cbt_sword_1h_standing_ready_idle_1.ans",
     "walk": "appearance/animation/all_b_loc_walk_male.ans",
     "recover-cut-right": "appearance/animation/all_b_cbt_sword_1h_standing_ready_hrz_slash_middle_r.ans",
