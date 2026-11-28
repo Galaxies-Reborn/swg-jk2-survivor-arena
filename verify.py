@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def staff_counters():
-    def exchange(sweeping=False, dodge=0., jump=0., guard=False, turn=math.pi):
+    def exchange(sweeping=False, dodge=0., jump=0., guard_at=None, turn=math.pi):
         s = fresh()
         s["wave"] = 1
         e = actor(3, 0., 0., 2)
@@ -46,7 +46,7 @@ def staff_counters():
         p.update(x=dodge, y=jump, yaw=turn)
         for age in range(1, 10 if sweeping else 8):
             s["clock"] = age
-            if guard and age == (9 if sweeping else 7):
+            if age == guard_at:
                 p.update(clip="guard", age=2, duration=10)
             pursue(s, e, [p])
             assert e["yaw"] == 0.
@@ -59,16 +59,19 @@ def staff_counters():
     assert exchange(dodge=0.8)[1]["health"] == 100
     assert exchange(sweeping=True, dodge=0.65)[1]["health"] == 86
     assert exchange(sweeping=True, jump=0.6)[1]["health"] == 100
-    raider, target = exchange(guard=True)
+    raider, target = exchange(guard_at=7)
     assert target["health"] == 100 and target["contact_kind"] == "guard"
     assert raider["clip"] == "stagger" and target["riposte_until"] > 7
     assert target["parry_pose"] == [7, "parry-top", 8]
     _, x, y, z = target["clash"]
     assert math.isclose(y, 1.45) and math.isclose(target["z"] - z, 0.60)
     assert raider["z"] < z < target["z"] and x == target["x"]
-    side_block = exchange(sweeping=True, dodge=0.83, guard=True)[1]
+    early = exchange(sweeping=True, guard_at=8)[1]
+    assert early["health"] == 100 and early["clash"][0] == 8 and early["riposte_until"] == 15
+    assert exchange(sweeping=True, guard_at=8, turn=0.)[1]["health"] == 86
+    side_block = exchange(sweeping=True, dodge=0.83, guard_at=9)[1]
     assert side_block["parry_pose"] == [9, "parry-left", 8]
-    assert exchange(guard=True, turn=0.)[1]["health"] == 83
+    assert exchange(guard_at=7, turn=0.)[1]["health"] == 83
     print("PASS committed Tusken lunge, sweep, sidestep, jump and facing parry")
 
 

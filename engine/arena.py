@@ -743,7 +743,10 @@ def staff_attack(s, e, players, nav):
         else:
             e["x"] += fx * advance
             e["z"] += fz * advance
-    if age != (9 if sweeping else 7):
+    strike_age = 9 if sweeping else 7
+    # The horizontal sweep reaches a raised saber one tick before the body.
+    intercept = sweeping and age == strike_age - 1
+    if not intercept and age != strike_age:
         return
     for p in sorted(players, key=lambda target: (distance(e, target), target["slot"])):
         dx, dz = p["x"] - e["x"], p["z"] - e["z"]
@@ -767,6 +770,9 @@ def staff_attack(s, e, players, nav):
                           foot + (1.22 if sweeping else 1.45), p["z"] - reach * dz / gap]
             p["contact_kind"] = "guard"
             start(e, "stagger", 13, now)
+            return
+        if intercept:
+            # The closest exposed target still gets the ordinary damage tick.
             return
         p["clash"] = [now, x, foot + (0.7 if sweeping else 1.1), z]
         p["contact_kind"] = "hit"

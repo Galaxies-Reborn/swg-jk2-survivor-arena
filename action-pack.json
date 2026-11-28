@@ -119,6 +119,7 @@
     {
       "joint": "hold_r",
       "mesh": "appearance/mesh/wp_mle_baton_gaderiffi_l0.msh",
+      "block_recoil_clip": "staff-recoil",
       "styles": [
         2
       ],

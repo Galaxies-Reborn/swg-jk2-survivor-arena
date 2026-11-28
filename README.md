@@ -18,6 +18,8 @@ The converter writes one player-local file under `.local/action-motion/`. Removi
 
 The pack lists attack clips in `sounds_during_hit`. If damage arrives with a new swing or shot, the impact plays immediately and the attack keeps its own sound timing. A downed fighter drops any pending swing sound.
 
+A raised saber can intercept a sweeping gaderffii one simulation tick before it reaches the defender. The staff prop names its recoil animation in `block_recoil_clip` so the client can place parry sparks along the saber near the displayed staff surface.
+
 ## Play on Windows
 
 Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, walk_upper, particle_contact_trails, sounds, sounds_during_hit, sample_start_ms, view_swings and view_guard support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
