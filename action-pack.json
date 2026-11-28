@@ -189,6 +189,7 @@
   "local_motion": true,
   "frame_rate": 60,
   "cut_playback_ms": {"300": 300, "400": 350, "500": 450},
+  "return_tip_speed_mps": 24,
   "return_pairs": [["cut-left", "cut-right"]],
   "view_guard": {
     "clips": ["guard", "parry-top", "parry-left", "parry-right"],
