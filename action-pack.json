@@ -507,6 +507,7 @@
   },
   "layered_locomotion": true,
   "impact_particles": true,
+  "particle_contact_trails": true,
   "surface_scars": true,
   "contact_clips": ["parry-top", "parry-left", "parry-right", "clash-top", "clash-left", "clash-right"],
   "chase_on_entry": true,
