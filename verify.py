@@ -63,6 +63,9 @@ def staff_counters():
     assert target["health"] == 100 and target["contact_kind"] == "guard"
     assert raider["clip"] == "stagger" and target["riposte_until"] > 7
     assert target["parry_pose"] == [7, "parry-top", 8]
+    _, x, y, z = target["clash"]
+    assert math.isclose(y, 1.45) and math.isclose(target["z"] - z, 0.60)
+    assert raider["z"] < z < target["z"] and x == target["x"]
     side_block = exchange(sweeping=True, dodge=0.83, guard=True)[1]
     assert side_block["parry_pose"] == [9, "parry-left", 8]
     assert exchange(guard=True, turn=0.)[1]["health"] == 83
@@ -484,6 +487,8 @@ def verify_staff_publication(worker, a, b, kernel):
         assert observations[0] == observations[1]
         clip, health, point, target_clip = observations[0]
         if clip == "stagger" and target_clip == "parry-top" and health == 69 and point:
+            assert math.isclose(point[1] - target["y"], 1.45, abs_tol=1e-4)
+            assert 0.45 < math.hypot(point[0] - target["x"], point[2] - target["z"]) <= 0.601
             saw_parry = True
         if point:
             seen.add((clip, health))

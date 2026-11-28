@@ -593,8 +593,7 @@ def contact_side(fighter, x, z):
     return "left" if lateral > 0 else "right"
 
 
-def timed_parry(defender, now):
-    _, x, _, z = defender["clash"]
+def timed_parry(defender, now, x, z):
     pose = "parry-" + contact_side(defender, x, z)
     remaining = max(1, defender["duration"] - defender["age"])
     defender["parry_pose"] = [now, pose, remaining]
@@ -664,7 +663,7 @@ def melee(p, enemies, now, nav=None):
                     # A timed block turns the defender's blade into the incoming
                     # cut. Its visual recovery can be interrupted by a riposte.
                     _, x, _, z = e["clash"]
-                    timed_parry(e, now)
+                    timed_parry(e, now, x, z)
                     start(p, "stagger", 7, now)
                     p["rebound_pose"] = "blocked-" + contact_side(p, x, z)
                     p["follow_until"] = -1
@@ -757,13 +756,19 @@ def staff_attack(s, e, players, nav):
         now = s["clock"]
         gap = max(0.01, distance(e, p))
         x, z = p["x"] - 0.20 * dx / gap, p["z"] - 0.20 * dz / gap
-        p["clash"] = [now, x, p.get("ground", 0.) + p["y"] + (0.7 if sweeping else 1.1), z]
+        foot = p.get("ground", 0.) + p["y"]
         if p["clip"] == "guard" and faces(p, e):
+            # Choose the reaction from the incoming strike at the body. The
+            # blade intercepts it farther forward, before it reaches the torso.
+            if p["age"] <= 4:
+                timed_parry(p, now, x, z)
+            reach = min(0.60, gap * 0.8)
+            p["clash"] = [now, p["x"] - reach * dx / gap,
+                          foot + (1.22 if sweeping else 1.45), p["z"] - reach * dz / gap]
             p["contact_kind"] = "guard"
             start(e, "stagger", 13, now)
-            if p["age"] <= 4:
-                timed_parry(p, now)
             return
+        p["clash"] = [now, x, foot + (0.7 if sweeping else 1.1), z]
         p["contact_kind"] = "hit"
         hurt(p, min(30, (13 if sweeping else 16) + s["wave"]), now)
         if p["health"]:
