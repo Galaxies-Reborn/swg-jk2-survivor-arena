@@ -593,6 +593,14 @@ def contact_side(fighter, x, z):
     return "left" if lateral > 0 else "right"
 
 
+def timed_parry(defender, now):
+    _, x, _, z = defender["clash"]
+    pose = "parry-" + contact_side(defender, x, z)
+    remaining = max(1, defender["duration"] - defender["age"])
+    defender["parry_pose"] = [now, pose, remaining]
+    defender["riposte_until"] = now + 7
+
+
 def melee(p, enemies, now, nav=None):
     if p["clip"] not in CUTS:
         return
@@ -656,13 +664,10 @@ def melee(p, enemies, now, nav=None):
                     # A timed block turns the defender's blade into the incoming
                     # cut. Its visual recovery can be interrupted by a riposte.
                     _, x, _, z = e["clash"]
-                    side = contact_side(e, x, z)
-                    remaining = max(1, e["duration"] - e["age"])
-                    e["parry_pose"] = [now, "parry-" + side, remaining]
+                    timed_parry(e, now)
                     start(p, "stagger", 7, now)
                     p["rebound_pose"] = "blocked-" + contact_side(p, x, z)
                     p["follow_until"] = -1
-                    e["riposte_until"] = now + 7
                     push(p, e, 0.20, nav)
                     return
                 continue
@@ -757,7 +762,7 @@ def staff_attack(s, e, players, nav):
             p["contact_kind"] = "guard"
             start(e, "stagger", 13, now)
             if p["age"] <= 4:
-                p["riposte_until"] = now + 7
+                timed_parry(p, now)
             return
         p["contact_kind"] = "hit"
         hurt(p, min(30, (13 if sweeping else 16) + s["wave"]), now)

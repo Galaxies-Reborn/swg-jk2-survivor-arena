@@ -47,7 +47,7 @@ def staff_counters():
         for age in range(1, 10 if sweeping else 8):
             s["clock"] = age
             if guard and age == (9 if sweeping else 7):
-                p.update(clip="guard", age=2)
+                p.update(clip="guard", age=2, duration=10)
             pursue(s, e, [p])
             assert e["yaw"] == 0.
             if age < (9 if sweeping else 7):
@@ -62,6 +62,9 @@ def staff_counters():
     raider, target = exchange(guard=True)
     assert target["health"] == 100 and target["contact_kind"] == "guard"
     assert raider["clip"] == "stagger" and target["riposte_until"] > 7
+    assert target["parry_pose"] == [7, "parry-top", 8]
+    side_block = exchange(sweeping=True, dodge=0.83, guard=True)[1]
+    assert side_block["parry_pose"] == [9, "parry-left", 8]
     assert exchange(guard=True, turn=0.)[1]["health"] == 83
     print("PASS committed Tusken lunge, sweep, sidestep, jump and facing parry")
 
@@ -455,11 +458,15 @@ def verify_staff_publication(worker, a, b, kernel):
     # Publish a sequence of real simulated frames through the authority boundary.
     # Place the target at staff range to exercise both attacks in a short test.
     state = fresh()
-    raider = actor(4, -0.55, -1.65, 2)
+    raider = actor(4, -0.55, 1.65, 2)
     state.update(phase="fighting", wave=1, enemies=[raider])
     seen = set()
-    for _ in range(34):
-        a.send()
+    saw_parry = False
+    for _ in range(56):
+        enemy = state["enemies"][0]
+        guarding = (("staff-sweep", 69) in seen and enemy["clip"] == "overhead"
+                    and enemy["age"] == 5 and not saw_parry)
+        a.send("guard" if guarding else "")
         b.send()
         job = json.loads(worker.rows("simulation_work")[0]["snapshot"])
         state, frame = step(state, job["seats"], kernel)
@@ -473,13 +480,16 @@ def verify_staff_publication(worker, a, b, kernel):
             rows = seat.rows()
             raider_row = next(r for r in rows if r["slot"] == 4)
             target = next(r for r in rows if r["slot"] == 1)
-            observations.append((raider_row["clip"], target["health"], target["contact_point"]))
+            observations.append((raider_row["clip"], target["health"], target["contact_point"], target["clip"]))
         assert observations[0] == observations[1]
-        clip, health, point = observations[0]
+        clip, health, point, target_clip = observations[0]
+        if clip == "stagger" and target_clip == "parry-top" and health == 69 and point:
+            saw_parry = True
         if point:
             seen.add((clip, health))
     assert ("staff-strike", 83) in seen and ("staff-sweep", 69) in seen, seen
-    print("PASS both identities observe Tusken lunge and sweep damage and impact positions")
+    assert saw_parry, seen
+    print("PASS both identities observe Tusken lunge, sweep and timed overhead parry")
 
 
 def verify_contact_publication(worker, a, b, kernel):
