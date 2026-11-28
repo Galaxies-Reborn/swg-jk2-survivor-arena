@@ -433,6 +433,10 @@
       ]
     ]
   },
+  "sounds_during_hit": [
+    "cut-left", "cut-right", "up-left", "up-right", "down-left", "down-right",
+    "overhead", "back", "fire", "staff-sweep", "staff-strike"
+  ],
   "sample_start_ms": {
     "sample/wep_lightsaber_miss_01.wav": 175,
     "sample/wep_lightsaber_miss_02.wav": 195,

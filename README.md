@@ -16,9 +16,11 @@ Restart the arena client after preparing the tracks. Seven fast-style attacks, t
 
 The converter writes one player-local file under `.local/action-motion/`. Removing that file restores SWG-only animation. Keep the converted tracks out of source control and release bundles.
 
+The pack lists attack clips in `sounds_during_hit`. If damage arrives with a new swing or shot, the impact plays immediately and the attack keeps its own sound timing. A downed fighter drops any pending swing sound.
+
 ## Play on Windows
 
-Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, walk_upper, particle_contact_trails, sounds, sample_start_ms, view_swings and view_guard support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
+Use a Bevy client with action-pack schema 2 and indoor_arena, chase camera, layered_locomotion, walk_upper, particle_contact_trails, sounds, sounds_during_hit, sample_start_ms, view_swings and view_guard support, a player-owned pre-CU SWG content pack, Python 3.10+, PowerShell 7, CMake with a C compiler, Rustup and SpacetimeDB standalone 2.10.0. From this repository run:
 
 ```powershell
 ./Start-Arena.ps1 -Standalone '<path to spacetimedb-standalone.exe>' -ClientRoot '<game client root>'
